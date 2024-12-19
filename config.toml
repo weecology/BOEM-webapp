@@ -1,0 +1,24 @@
+[server]
+maxUploadSize = 600
+maxMessageSize = 600
+
+[global]
+dataFrameSerialization = "arrow"
+# Increase memory management settings
+minCachedDataBytes = 10000000
+maxCachedDataBytes = 1000000000
+
+[browser]
+gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
+
+[theme]
+primaryColor = "#0066cc"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+
+[runner]
+# Increase memory limits
+memory_limit = "4096mb"

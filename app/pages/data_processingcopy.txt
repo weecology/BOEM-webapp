@@ -1,0 +1,149 @@
+import streamlit as st
+from pathlib import Path
+from utils.raster_utils import convert_to_cog
+from utils.vector_utils import optimize_vector
+import os
+
+def app():
+    st.title("Data Processing")
+
+    # Get the app's data directory
+    app_data_dir = Path(__file__).parents[1] / "data"
+    processed_dir = app_data_dir / "processed"
+
+    # Ensure processed directory exists
+    processed_dir.mkdir(parents=True, exist_ok=True)
+
+    # Add option to select data source type
+    data_source = st.radio(
+        "Select Data Type",
+        ["Raster File", "Vector File"]
+    )
+
+    # Add option for input method
+    input_method = st.radio(
+        "Select Input Method",
+        ["Upload File", "Enter File Path"]
+    )
+
+    # Initialize input_file as None
+    input_file = None
+
+    if data_source == "Raster File":
+        if input_method == "Upload File":
+            uploaded_file = st.file_uploader(
+                "Upload a raster file",
+                type=['tif', 'tiff']
+            )
+            
+            if uploaded_file:
+                # Save uploaded file temporarily
+                temp_input = processed_dir / "temp" / uploaded_file.name
+                temp_input.parent.mkdir(parents=True, exist_ok=True)
+                
+                with open(temp_input, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                input_file = temp_input
+                
+        else:  # Enter File Path
+            file_path = st.text_input(
+                "Enter full path to raster file",
+                help="Example: /path/to/your/file.tif"
+            )
+            if file_path:
+                input_file = Path(file_path)
+
+        if input_file and input_file.exists():
+            try:
+                # Show preview info about the file
+                st.write(f"Selected file: {input_file.name}")
+                st.write(f"Size: {os.path.getsize(input_file) / (1024*1024):.2f} MB")
+                
+                if st.button("Process Raster"):
+                    # Convert to COG and store in processed directory
+                    output_file = processed_dir / "raster" / "cog" / f"processed_{input_file.name}"
+                    output_file.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    with st.spinner("Processing raster file..."):
+                        convert_to_cog(str(input_file), str(output_file))
+                    
+                    st.success(f"Raster file processed and saved to {output_file}")
+                    
+                    # Add download button for processed file
+                    with open(output_file, 'rb') as f:
+                        st.download_button(
+                            label="Download processed file",
+                            data=f,
+                            file_name=output_file.name,
+                            mime="image/tiff"
+                        )
+                    
+                    # Cleanup temporary file if it was uploaded
+                    if input_method == "Upload File":
+                        input_file.unlink(missing_ok=True)
+                        
+            except Exception as e:
+                st.error(f"Error processing raster file: {str(e)}")
+                if input_method == "Upload File":
+                    input_file.unlink(missing_ok=True)
+
+    elif data_source == "Vector File":
+        if input_method == "Upload File":
+            uploaded_file = st.file_uploader(
+                "Upload a vector file",
+                type=['shp', 'geojson', 'kml', 'mbtiles']
+            )
+            
+            if uploaded_file:
+                # Save uploaded file temporarily
+                temp_input = processed_dir / "temp" / uploaded_file.name
+                temp_input.parent.mkdir(parents=True, exist_ok=True)
+                
+                with open(temp_input, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                input_file = temp_input
+                
+        else:  # Enter File Path
+            file_path = st.text_input(
+                "Enter full path to vector file",
+                help="Example: /path/to/your/file.shp"
+            )
+            if file_path:
+                input_file = Path(file_path)
+
+        if input_file and input_file.exists():
+            try:
+                # Show preview info about the file
+                st.write(f"Selected file: {input_file.name}")
+                st.write(f"Size: {os.path.getsize(input_file) / (1024*1024):.2f} MB")
+                
+                if st.button("Process Vector"):
+                    # Optimize vector and store in processed directory
+                    output_file = processed_dir / "vector" / f"optimized_{input_file.stem}.geojson"
+                    output_file.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    with st.spinner("Processing vector file..."):
+                        optimize_vector(str(input_file), str(output_file))
+                    
+                    st.success(f"Vector file processed and saved to {output_file}")
+                    
+                    # Add download button for processed file
+                    with open(output_file, 'rb') as f:
+                        st.download_button(
+                            label="Download processed file",
+                            data=f,
+                            file_name=output_file.name,
+                            mime="application/json"
+                        )
+                    
+                    # Cleanup temporary file if it was uploaded
+                    if input_method == "Upload File":
+                        input_file.unlink(missing_ok=True)
+                        
+            except Exception as e:
+                st.error(f"Error processing vector file: {str(e)}")
+                if input_method == "Upload File":
+                    input_file.unlink(missing_ok=True)
+
+if __name__ == "__main__":
+    app()
