@@ -17,3 +17,4 @@ watchdog
 xarray
 opencv-python
 threading
+paramiko
