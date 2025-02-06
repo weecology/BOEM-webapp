@@ -10,6 +10,12 @@ from pathlib import Path
 # Initialize async event loop
 nest_asyncio.apply()
 
+st.set_page_config(
+    page_title="Raster Analysis",
+    page_icon="📊",
+    layout="wide"
+)
+
 def get_or_create_eventloop():
     try:
         return asyncio.get_event_loop()

@@ -1,8 +1,7 @@
-# IMPORTANT: This must be the first Streamlit command
 import streamlit as st
 st.set_page_config(
-    page_title="Geospatial Data Viewer",
-    page_icon="🌍",
+    page_title="Home",
+    page_icon="🏠",
     layout="wide"
 )
 
@@ -15,36 +14,26 @@ app_dir = Path(__file__).parent
 if str(app_dir) not in sys.path:
     sys.path.append(str(app_dir))
 
-# Create the sidebar navigation with "Main" instead of "About"
-page = st.sidebar.selectbox(
-    "Navigation",
-    ["Main", "Raster Viewer", "Vector Viewer", "WebMap"]
-)
+st.title("BOEM Offshore Biodiversity Surveys")
 
-# Display the selected page
-if page == "Main":
-    st.title("Project Overview")
+st.markdown("""
+    Welcome to the BOEM Offshore Biodiversity Survey Data Viewer. 
+    This application provides tools for visualizing and analyzing biodiversity data collected during aerial surveys of offshore wind energy areas.
 
-    st.markdown("""
-
-    Text about the project and the goals of the project
+    ### Project Overview
     
-    ### Current Status
+    This project processes aerial survey data to:
+    - Detect and classify marine wildlife species
+    - Generate distribution maps and abundance estimates
+    - Analyze temporal and spatial patterns
+    - Support environmental impact assessments
 
-    Graphs and tables of the current status of the project
-
-    ### Future Work
-
-    Future work and ideas for the project
+    The data viewer includes:
+    - Interactive maps for viewing survey tracks and observations
+    - Analysis tools for exploring species distributions
+    - Video playback of flight line footage
+    - Image galleries of detected species
+    
+    For detailed information on model development and performance metrics, visit our [CometML Dashboard](https://www.comet.com/bw4sz/).
 
     """)
-
-elif page == "Raster Viewer":
-    from pages.raster_viewer import app
-    app()
-elif page == "Vector Viewer":
-    from pages.vector_viewer import app
-    app()
-elif page == "WebMap":
-    from pages.webmap import app
-    app()

@@ -15,3 +15,5 @@ streamlit-file-browser
 seaborn
 watchdog
 xarray
+opencv-python
+threading

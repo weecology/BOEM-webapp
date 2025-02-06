@@ -10,7 +10,7 @@ def app():
     st.title("Species Analysis")
     
     # Read the data
-    data_path = Path(__file__).parents[1] / "data" / "PredictedBirds.csv"
+    data_path = Path(__file__).parents[1] / "data" / "predictions.csv"
     
     if not data_path.exists():
         st.error(f"File not found: {data_path}")
@@ -55,16 +55,7 @@ def app():
             height=500,
             width=800
         )
-        st.plotly_chart(fig)
-        
-        # Pie chart
-        fig_pie = px.pie(
-            values=species_counts.values,
-            names=species_counts.index,
-            title=f"Distribution of Top {n_species} Species"
-        )
-        fig_pie.update_layout(height=500, width=800)
-        st.plotly_chart(fig_pie)
+
     
     with tab2:
         st.subheader("Temporal Analysis")
