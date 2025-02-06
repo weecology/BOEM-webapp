@@ -12,3 +12,6 @@ fiona
 pyproj
 rtree
 streamlit-file-browser
+seaborn
+watchdog
+xarray

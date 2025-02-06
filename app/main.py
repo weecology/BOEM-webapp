@@ -17,44 +17,27 @@ if str(app_dir) not in sys.path:
 
 # Create the sidebar navigation with "Main" instead of "About"
 page = st.sidebar.selectbox(
-    "Navigation", 
+    "Navigation",
     ["Main", "Raster Viewer", "Vector Viewer", "WebMap"]
 )
 
 # Display the selected page
 if page == "Main":
-    st.title("Geospatial Data Viewer")
-    
+    st.title("Project Overview")
+
     st.markdown("""
-    ## Welcome to the Geospatial Data Viewer!
+
+    Text about the project and the goals of the project
     
-    This application provides interactive visualization and processing of geospatial data:
-    
-    ### Features:
-    - **Raster Viewer**: View and analyze raster datasets (GeoTIFF)
-    - **Vector Viewer**: Explore vector data with interactive styling
-    - **WebMap**: View MBTiles and web mapping services
-    
-    ### Supported Formats:
-    - Raster: GeoTIFF (.tif, .tiff)
-    - Vector: Shapefile (.shp), GeoJSON (.geojson)
-    - Tiles: MBTiles (.mbtiles)
-    
-    ### Getting Started:
-    1. Select a viewer from the sidebar
-    2. Upload your data
-    3. Interact with the map
-    
-    ### Data Processing:
-    - Automatic optimization for large files
-    - Cloud-Optimized GeoTIFF (COG) conversion
-    - Vector tiling and simplification
+    ### Current Status
+
+    Graphs and tables of the current status of the project
+
+    ### Future Work
+
+    Future work and ideas for the project
+
     """)
-    
-    # Display a sample map
-    m = leafmap.Map(center=[0, 0], zoom=2)
-    m.add_basemap("OpenStreetMap")
-    m.to_streamlit(height=500)
 
 elif page == "Raster Viewer":
     from pages.raster_viewer import app

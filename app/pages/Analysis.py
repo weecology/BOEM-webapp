@@ -7,7 +7,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 def app():
-    st.title("Bird Species Analysis")
+    st.title("Species Analysis")
     
     # Read the data
     data_path = Path(__file__).parents[1] / "data" / "PredictedBirds.csv"
