@@ -1,0 +1,17 @@
+streamlit
+leafmap
+rasterio
+rio-cogeo
+folium
+streamlit-folium
+nest-asyncio
+localtileserver
+geopandas
+shapely
+fiona
+pyproj
+rtree
+streamlit-file-browser
+seaborn
+watchdog
+xarray
