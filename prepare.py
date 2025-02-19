@@ -5,6 +5,8 @@ import datetime
 from app.utils.vector_utils import optimize_vector
 import pandas as pd
 import requests
+import cv2
+import numpy as np
 
 def get_newest_report_dir(sftp, base_dir):
     """Find the newest timestamped directory in the reports folder"""
@@ -29,10 +31,10 @@ def download_report_files(base_dir):
     """Download files from newest report directory on server"""
     
     # SSH connection details
-    hostname = os.environ.get('REPORT_SERVER_HOST')
+    hostname = os.environ.get('REPORT_SERVER_HOST') 
     username = os.environ.get('REPORT_SERVER_USER') 
     password = os.environ.get('REPORT_SERVER_PASS')
-    port = 22
+    port = 2222
     
     if not all([hostname, username]):
         raise Exception("Missing required environment variables for SSH connection")
@@ -73,16 +75,40 @@ def download_report_files(base_dir):
         if 'ssh' in locals():
             ssh.close()
 
-def download_images():
+def crop_image(image_path, bbox, padding=30):
     """
-    Downloads one sample image for each unique label from predictions.csv
-    using SFTP instead of HTTP requests
+    Crop image based on bbox coordinates with padding
+    bbox: [xmin, ymin, xmax, ymax]
+    padding: number of pixels to add around the bbox
+    """
+    # Read image
+    img = cv2.imread(str(image_path))
+    if img is None:
+        raise ValueError(f"Could not read image: {image_path}")
+    
+    # Get image dimensions
+    height, width = img.shape[:2]
+    
+    # Add padding to bbox coordinates
+    xmin = max(0, int(bbox[0] - padding))
+    ymin = max(0, int(bbox[1] - padding))
+    xmax = min(width, int(bbox[2] + padding))
+    ymax = min(height, int(bbox[3] + padding))
+    
+    # Crop image
+    cropped = img[ymin:ymax, xmin:xmax]
+    return cropped
+
+def download_and_crop_images():
+    """
+    Downloads one sample image for each unique label from predictions.csv,
+    crops around the detection, and saves the result
     """
     # SSH connection details
-    hostname = os.environ.get('REPORT_SERVER_HOST')
+    hostname = os.environ.get('REPORT_SERVER_HOST')  # Remove square brackets
     username = os.environ.get('REPORT_SERVER_USER') 
     password = os.environ.get('REPORT_SERVER_PASS')
-    port = 22
+    port = 2222
     
     if not all([hostname, username]):
         raise Exception("Missing required environment variables for SSH connection")
@@ -101,37 +127,57 @@ def download_images():
         
     df = pd.read_csv(predictions_file)
     
-    # Get one sample image path for each unique label
-    sample_images = df.groupby('label').first()['image_path']
-    # make the image path the full path on HPC by combining 
-    sample_images = [f"/mnt/research/rc/data/images/{image_path}" for image_path in sample_images]
-
+    # Get one sample for each unique label with bbox coordinates
+    samples = df.groupby('label').first()
+    
     # Connect to server
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     
     try:
-        ssh.connect(hostname, username=username, password=password, port=port)
+        ssh.connect(hostname, username=username, password=password, port=22)
         sftp = ssh.open_sftp()
         
-        # Download each sample image
-        for label, remote_path in sample_images.items():
-            # Create safe filename from label
+        # Process each sample
+        for label, row in samples.iterrows():
+            # Get original image basename and create new filename with crop_{label}
+            original_basename = Path(row['image_path']).stem
             safe_label = "".join(c if c.isalnum() else "_" for c in label)
-            local_path = images_dir / f"{safe_label}.jpg"
+            image_path = images_dir / f"{original_basename}.jpg"
             
-            # Skip if image already exists
-            if local_path.exists():
+            # Skip if local image already exists
+            if image_path.exists():
                 print(f"Image for {label} already exists, skipping...")
                 continue
-                
+            
             try:
-                print(f"Downloading image for {label}...")
-                sftp.get(remote_path, str(local_path))
-                print(f"Downloaded image for {label}")
+                # Full path on HPC
+                remote_path = f"/blue/ewhite/b.weinstein/BOEM/sample_flight/JPG_2024_Jan27/annotated/{row['image_path']}"
+                
+                # Check if remote file exists
+                try:
+                    sftp.stat(remote_path)
+                except FileNotFoundError:
+                    print(f"Remote image not found: {remote_path}")
+                    continue
+                
+                print(f"Downloading and processing image for {label}...")
+                # Download to final location
+                sftp.get(remote_path, str(image_path))
+                
+                # Get bbox coordinates
+                bbox = [row['xmin'], row['ymin'], row['xmax'], row['ymax']]
+                
+                # Crop image in place
+                cropped = crop_image(image_path, bbox)
+                cv2.imwrite(str(image_path), cropped)
+                
+                print(f"Processed image for {label}")
                 
             except Exception as e:
-                print(f"Error downloading image for {label}: {str(e)}")
+                print(f"Error processing image for {label}: {str(e)}")
+                if image_path.exists():
+                    image_path.unlink()
                 
     except Exception as e:
         print(f"Error connecting to server: {str(e)}")
@@ -145,7 +191,7 @@ def download_images():
 
 if __name__ == '__main__':
     report_dir = os.environ.get('REPORT_DIR')
-    download_report_files(report_dir)
+    #download_report_files(report_dir)
+    download_and_crop_images()
     # Create vector data
-    optimize_vector("app/data/predictions.csv", "app/data/processed/predictions.shp")
-    download_images()
+    #optimize_vector("app/data/predictions.csv", "app/data/processed/predictions.shp")

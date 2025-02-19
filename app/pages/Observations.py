@@ -69,6 +69,21 @@ def app():
     **How to use:**
     - Click on any point on the map to view its metadata
     """)
+    
+    # Add download button for the data
+    if default_file.exists():
+        try:
+            with open(default_file, 'rb') as file:
+                shapefile_bytes = file.read()
+                st.download_button(
+                    label="Download Data",
+                    data=shapefile_bytes,
+                    file_name="predictions.shp",
+                    mime="application/octet-stream",
+                    help="Download the shapefile containing all observations"
+                )
+        except Exception as e:
+            st.error(f"Error preparing download: {str(e)}")
 
 def process_vector_file(file_path, m, color):
     """Process and add vector file to map"""
