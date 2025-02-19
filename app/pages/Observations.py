@@ -5,13 +5,13 @@ import os
 import sys
 from pathlib import Path
 import sqlite3
+import pandas as pd
+import requests
 
 # Add the project root to the Python path
 root_dir = str(Path(__file__).parents[2].absolute())
 if root_dir not in sys.path:
     sys.path.append(root_dir)
-
-from app.utils.vector_utils import optimize_vector
 
 def load_vector(file_path):
     """Load and cache vector data"""
@@ -30,95 +30,47 @@ def load_vector(file_path):
         return gpd.read_file(file_path), None, None, None, None, None
 
 def app():
-    st.title("Vector Data Viewer")
+    # Reduce default padding
+    st.set_page_config(layout="wide")
+    st.markdown("""
+        <style>
+        .block-container {
+            padding-left: 2rem;
+            padding-right: 2rem;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+    st.title("Observations")
     
     # Get the app's data directory
     app_data_dir = Path(__file__).parents[1] / "data"
     
-    col1, col2 = st.columns([3, 1])
+    # Create map
+    m = leafmap.Map()
+    m.add_basemap("OpenStreetMap")
     
-    with col2:
-        # Add option to select data source
-        data_source = st.radio(
-            "Select Data Source",
-            ["Default Data Directory", "External Path"]
-        )
-        
-        if data_source == "Default Data Directory":
-            # Scan data directory for vector files
-            vector_files = []
-            for ext in ['.shp', '.geojson', '.kml', '.mbtiles']:
-                vector_files.extend(list(app_data_dir.rglob(f"*{ext}")))
-            
-            if vector_files:
-                # Create relative paths for display
-                rel_paths = [str(f.relative_to(app_data_dir)) for f in vector_files]
-                selected_file = st.selectbox(
-                    "Select Vector File",
-                    rel_paths,
-                    format_func=lambda x: x
-                )
-                if selected_file:
-                    input_files = [app_data_dir / selected_file]
-                else:
-                    input_files = None
-            else:
-                st.warning("No vector files found in data directory")
-                input_files = None
-                
-        else:  # External Path
-            file_path = st.text_input(
-                "Enter full path to vector file",
-                help="Full path to .shp, .geojson, .kml, or .mbtiles file"
-            )
-            input_files = [Path(file_path)] if file_path else None
-        
-        color = st.color_picker(
-            "Choose layer color",
-            "#0000FF"
-        )
-        
-        opacity = st.slider(
-            "Layer Opacity",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.8
-        )
-        
-        show_basemap = st.checkbox("Show OpenStreetMap", value=False)
+    # Always use the default data file
+    default_file = app_data_dir / "predictions.shp"
     
-    with col1:
-        m = leafmap.Map()
-        if show_basemap:
-            m.add_basemap("OpenStreetMap")
-        
-        if input_files:
-            try:
-                # Handle existing file path (both data directory and external)
-                file_path = input_files[0]
-                if not file_path.exists():
-                    st.error(f"File not found: {file_path}")
-                else:
-                    # For shapefiles, check for associated files
-                    if file_path.suffix.lower() == '.shp':
-                        base_path = file_path.parent / file_path.stem
-                        required_exts = ['.shp', '.shx', '.dbf']
-                        missing_files = [
-                            ext for ext in required_exts 
-                            if not (base_path.parent / f"{base_path.stem}{ext}").exists()
-                        ]
-                        if missing_files:
-                            st.error(f"Missing required shapefile components: {', '.join(missing_files)}")
-                            return
-                    
-                    process_vector_file(file_path, m, color, opacity)
-                
-            except Exception as e:
-                st.error(f"Error processing vector data: {str(e)}")
-        
-        m.to_streamlit(height=600)
+    if default_file.exists():
+        try:
+            process_vector_file(default_file, m, "#0000FF")
+        except Exception as e:
+            st.error(f"Error processing vector data: {str(e)}")
+    else:
+        st.error(f"Data file not found: {default_file}")
+    
+    # Adjust map size - reduced width from 1200 to 1000
+    m.to_streamlit(height=700, width=1000)
+    
+    # Instructions below the map
+    st.info("""
+    **How to use:**
+    - Click on any point on the map to view its metadata
+    """)
 
-def process_vector_file(file_path, m, color, opacity):
+def process_vector_file(file_path, m, color):
     """Process and add vector file to map"""
     try:
         gdf, lon, lat, zoom, layer_name, attribution = load_vector(str(file_path))
@@ -128,7 +80,7 @@ def process_vector_file(file_path, m, color, opacity):
             m.add_gdf(
                 gdf,
                 layer_name=f"Vector Layer - {file_path.stem}",
-                style={'fillColor': color, 'opacity': opacity}
+                style={'fillColor': color}
             )
         else:
             # MBTiles file
@@ -136,8 +88,7 @@ def process_vector_file(file_path, m, color, opacity):
             m.add_tile_layer(
                 url=xyz_url,
                 name=layer_name or f"MBTiles Layer - {file_path.stem}",
-                attribution=attribution,
-                opacity=opacity
+                attribution=attribution
             )
             
             if lon is not None and lat is not None:
