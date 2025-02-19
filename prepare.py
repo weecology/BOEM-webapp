@@ -189,9 +189,82 @@ def download_and_crop_images():
         if 'ssh' in locals():
             ssh.close()
 
+def create_heatmap():
+    """Create heatmap rasters showing observation density for each flight line"""
+    import geopandas as gpd
+    import numpy as np
+    from shapely.geometry import box
+    import rasterio
+    from rasterio.transform import from_bounds
+    import os
+    from pathlib import Path
+
+    # Read the shapefile
+    gdf = gpd.read_file("app/data/predictions.shp")
+    
+    # Get unique flight lines
+    flight_lines = gdf['flight_nam'].unique()
+
+    # Create output directory if it doesn't exist
+    output_dir = Path("app/data/heatmaps")
+    output_dir.mkdir(exist_ok=True)
+
+    for flight in flight_lines:
+        # Filter data for this flight
+        flight_data = gdf[gdf['flight_nam'] == flight]
+        
+        if len(flight_data) == 0:
+            continue
+            
+        # Get bounds of flight line
+        minx, miny, maxx, maxy = flight_data.total_bounds
+        
+        # Create grid
+        cell_size = 0.001  # Adjust cell size as needed
+        nx = int((maxx - minx) / cell_size)
+        ny = int((maxy - miny) / cell_size)
+        
+        # Initialize empty array
+        heatmap = np.zeros((ny, nx))
+        
+        # Create transform for raster
+        transform = from_bounds(minx, miny, maxx, maxy, nx, ny)
+        
+        # Count points in each grid cell
+        for idx, row in flight_data.iterrows():
+            # Get point coordinates
+            x, y = row.geometry.x, row.geometry.y
+            
+            # Convert to array indices
+            col = int((x - minx) / cell_size)
+            row = int((y - miny) / cell_size)
+            
+            # Increment count if within bounds
+            if 0 <= row < ny and 0 <= col < nx:
+                heatmap[row, col] += 1
+        
+        # Save as GeoTIFF
+        output_path = output_dir / f"{flight}_heatmap.tif"
+        
+        with rasterio.open(
+            output_path,
+            'w',
+            driver='GTiff',
+            height=ny,
+            width=nx,
+            count=1,
+            dtype=heatmap.dtype,
+            crs=gdf.crs,
+            transform=transform
+        ) as dst:
+            dst.write(heatmap, 1)
+            
+        print(f"Created heatmap for flight {flight}")
+
 if __name__ == '__main__':
     report_dir = os.environ.get('REPORT_DIR')
     #download_report_files(report_dir)
     download_and_crop_images()
+    create_heatmap()
     # Create vector data
     #optimize_vector("app/data/predictions.csv", "app/data/processed/predictions.shp")
