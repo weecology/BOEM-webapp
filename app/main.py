@@ -1,4 +1,7 @@
 import streamlit as st
+from pathlib import Path
+import pandas as pd
+
 st.set_page_config(
     page_title="Home",
     page_icon="🏠",
@@ -8,6 +11,7 @@ st.set_page_config(
 import sys
 from pathlib import Path
 import leafmap.foliumap as leafmap
+import pandas as pd
 
 # Add the app directory to Python path
 app_dir = Path(__file__).parent
@@ -35,5 +39,23 @@ st.markdown("""
     - Image galleries of detected species
     
     For detailed information on model development and performance metrics, visit our [CometML Dashboard](https://www.comet.com/bw4sz/).
+""")
 
-    """)
+# Read the data
+data_path = Path(__file__).parent / "data" / "predictions.csv"
+
+if not data_path.exists():
+    st.error(f"File not found: {data_path}")
+    st.stop()
+
+df = pd.read_csv(data_path)
+
+# Convert date with specific format
+df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
+
+# Display basic statistics
+st.header("Dataset Overview")
+st.write(f"Total Records: {len(df)}")
+st.write(f"Number of Species: {df['label'].nunique()}")
+st.write(f"Total Sites: {df['flight_name'].nunique()}")
+st.write(f"Date Range: {df['date'].min().strftime('%Y-%m-%d')} to {df['date'].max().strftime('%Y-%m-%d')}")

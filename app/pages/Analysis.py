@@ -8,41 +8,31 @@ import matplotlib.pyplot as plt
 
 def app():
     st.title("Species Analysis")
+    # Get the app's data directory
+    app_data_dir = Path(__file__).parents[1] / "data"
     
-    # Read the data
-    data_path = Path(__file__).parents[1] / "data" / "predictions.csv"
-    
-    if not data_path.exists():
-        st.error(f"File not found: {data_path}")
-        return
-        
-    df = pd.read_csv(data_path)
-    
-    # Convert date with specific format
-    df['Date'] = pd.to_datetime(df['Date'], format='%m_%d_%Y')
-    
-    # Display basic statistics
-    st.header("Dataset Overview")
-    st.write(f"Total Records: {len(df)}")
-    st.write(f"Number of Species: {df['label'].nunique()}")
-    st.write(f"Total Sites: {df['Site'].nunique()}")
-    st.write(f"Date Range: {df['Date'].min().strftime('%Y-%m-%d')} to {df['Date'].max().strftime('%Y-%m-%d')}")
-    
+    # Always use the default data file
+    default_file = app_data_dir / "predictions.csv"
+    df = pd.read_csv(default_file)
+
+    df["date"] = pd.to_datetime(df["date"])
+    df["count"] = 1
     # Add tabs for different visualizations
     tab1, tab2, tab3 = st.tabs([
         "Species Distribution", 
         "Temporal Analysis",
-        "Site Analysis"
+        "Flight Analysis"
     ])
     
     with tab1:
         st.subheader("Species Distribution")
         
         # Top N species by count
-        n_species = st.slider("Select number of top species to display", 5, 20, 10)
+        n_species = 10
         
         # Create species count plot
-        species_counts = df.groupby('label')['count'].sum().sort_values(ascending=False).head(n_species)
+        
+        species_counts = df.groupby('label').size().sort_values(ascending=False).head(n_species)
         
         fig = px.bar(
             x=species_counts.index,
@@ -55,18 +45,17 @@ def app():
             height=500,
             width=800
         )
-
-    
+        st.plotly_chart(fig)
     with tab2:
         st.subheader("Temporal Analysis")
         
         # Add month and year columns
-        df['Month'] = df['Date'].dt.month
-        df['Year'] = df['Date'].dt.year
-        df['MonthYear'] = df['Date'].dt.strftime('%Y-%m')
+        df['Month'] = df['date'].dt.month
+        df['Year'] = df['date'].dt.year
+        df['MonthYear'] = df['date'].dt.strftime('%Y-%m')
         
         # Monthly trends
-        monthly_counts = df.groupby('MonthYear')['count'].sum().reset_index()
+        monthly_counts = df.groupby('MonthYear').size().reset_index(name='count')
         fig_monthly = px.line(
             monthly_counts,
             x='MonthYear',
@@ -100,13 +89,13 @@ def app():
         st.subheader("Site Analysis")
         
         # Site distribution
-        site_counts = df.groupby('Site')['count'].sum().sort_values(ascending=False)
+        site_counts = df.groupby('flight_name').size().sort_values(ascending=False)
         
         fig_sites = px.bar(
             x=site_counts.index,
             y=site_counts.values,
-            title="Bird Counts by Site",
-            labels={'x': 'Site', 'y': 'Total Count'}
+            title="Bird Counts by Flight",
+            labels={'x': 'Flight', 'y': 'Total Count'}
         )
         fig_sites.update_layout(
             xaxis_tickangle=-45,
@@ -115,9 +104,10 @@ def app():
         )
         st.plotly_chart(fig_sites)
         
-        # Species distribution by site
-        site_species = df.pivot_table(
-            index='Site',
+        # Species distribution by flight
+        df["count"] = 1
+        flight_species = df.pivot_table(
+            index='flight_name',
             columns='label',
             values='count',
             aggfunc='sum',
@@ -125,8 +115,8 @@ def app():
         )
         
         fig, ax = plt.subplots(figsize=(12, 8))
-        sns.heatmap(site_species, cmap='YlOrRd', ax=ax)
-        plt.title("Species Distribution by Site")
+        sns.heatmap(flight_species, cmap='YlOrRd', ax=ax)
+        plt.title("Species Distribution by Flight")
         plt.xticks(rotation=45)
         st.pyplot(fig)
 
