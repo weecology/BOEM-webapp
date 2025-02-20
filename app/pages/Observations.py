@@ -1,12 +1,10 @@
 import streamlit as st
 import leafmap.foliumap as leafmap
 import geopandas as gpd
-import os
 import sys
 from pathlib import Path
 import sqlite3
 import pandas as pd
-import requests
 
 # Add the project root to the Python path
 root_dir = str(Path(__file__).parents[2].absolute())
@@ -46,44 +44,96 @@ def app():
     # Get the app's data directory
     app_data_dir = Path(__file__).parents[1] / "data"
     
-    # Create map
-    m = leafmap.Map()
-    m.add_basemap("OpenStreetMap")
+    # Create columns for map and controls
+    col1, col2 = st.columns([4, 1])  # 4:1 ratio to make control column narrow
     
-    # Always use the default data file
-    default_file = app_data_dir / "predictions.shp"
+    # Add controls in col2 first
+    with col2:
+        # Load data first to get unique labels
+        default_file = app_data_dir / "predictions.shp"
+        if default_file.exists():
+            gdf = gpd.read_file(default_file)
+            # drop na labels
+            gdf = gdf[gdf['label'].notna()]
+            unique_labels = sorted(gdf['label'].unique())
+            
+            # Add score threshold slider
+            score_threshold = st.slider(
+                "Confidence Score",  # Shortened label
+                min_value=0.0,
+                max_value=1.0,
+                value=0.1,
+                step=0.05,
+                help="Filter observations by confidence score"
+            )
+            
+            # Add label filter
+            selected_labels = st.multiselect(
+                "Species",
+                options=unique_labels,
+                default=unique_labels,
+                help="Select species to display"
+            )
     
-    if default_file.exists():
-        try:
-            process_vector_file(default_file, m, "#0000FF")
-        except Exception as e:
-            st.error(f"Error processing vector data: {str(e)}")
-    else:
-        st.error(f"Data file not found: {default_file}")
+    with col1:
+        # Create map
+        m = leafmap.Map()
+        m.add_basemap("OpenStreetMap")
+        
+        if default_file.exists():
+            try:
+                # Filter data based on both score threshold and selected labels
+                filtered_gdf = gdf[
+                    (gdf['score'] >= score_threshold) & 
+                    (gdf['label'].isin(selected_labels))
+                ]
+                
+                if len(filtered_gdf) == 0:
+                    st.warning("No observations meet the selected filters")
+                else:
+                    m.add_gdf(
+                        filtered_gdf,
+                        layer_name=f"Observations (score ≥ {score_threshold})",
+                        style={'fillColor': "#0000FF"}
+                    )
+            except Exception as e:
+                st.error(f"Error processing vector data: {str(e)}")
+        else:
+            st.error(f"Data file not found: {default_file}")
+        
+        # Display map
+        m.to_streamlit(height=700, width=None)
     
-    # Adjust map size - reduced width from 1200 to 1000
-    m.to_streamlit(height=700, width=1000)
+    # Add download button in col2
+    with col2:
+        if default_file.exists():
+            try:
+                # Save filtered data to temporary file
+                temp_file = app_data_dir / "temp_filtered.shp"
+                filtered_gdf.to_file(temp_file)
+                
+                with open(temp_file, 'rb') as file:
+                    shapefile_bytes = file.read()
+                    st.download_button(
+                        label="Download Data",
+                        data=shapefile_bytes,
+                        file_name=f"predictions_filtered.shp",
+                        mime="application/octet-stream",
+                        help=f"Download filtered observations (score ≥ {score_threshold})"
+                    )
+                
+                # Clean up temporary file
+                temp_file.unlink()
+            except Exception as e:
+                st.error(f"Error preparing download: {str(e)}")
     
-    # Instructions below the map
+    # Instructions below everything
     st.info("""
     **How to use:**
     - Click on any point on the map to view its metadata
+    - Use the confidence score slider to filter observations
+    - Select species to show/hide from the map
     """)
-    
-    # Add download button for the data
-    if default_file.exists():
-        try:
-            with open(default_file, 'rb') as file:
-                shapefile_bytes = file.read()
-                st.download_button(
-                    label="Download Data",
-                    data=shapefile_bytes,
-                    file_name="predictions.shp",
-                    mime="application/octet-stream",
-                    help="Download the shapefile containing all observations"
-                )
-        except Exception as e:
-            st.error(f"Error preparing download: {str(e)}")
 
 def process_vector_file(file_path, m, color):
     """Process and add vector file to map"""
