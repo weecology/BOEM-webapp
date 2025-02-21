@@ -3,7 +3,6 @@ from pathlib import Path
 import zipfile
 import io
 import pandas as pd
-import cv2
 
 def get_newest_report_url():
     """Find the newest timestamped zip file from the web server"""
@@ -48,30 +47,6 @@ def download_report_files():
     except Exception as e:
         print(f'Error downloading report files: {str(e)}')
         raise
-
-def crop_image(image_path, bbox, padding=30):
-    """
-    Crop image based on bbox coordinates with padding
-    bbox: [xmin, ymin, xmax, ymax]
-    padding: number of pixels to add around the bbox
-    """
-    # Read image
-    img = cv2.imread(str(image_path))
-    if img is None:
-        raise ValueError(f"Could not read image: {image_path}")
-    
-    # Get image dimensions
-    height, width = img.shape[:2]
-    
-    # Add padding to bbox coordinates
-    xmin = max(0, int(bbox[0] - padding))
-    ymin = max(0, int(bbox[1] - padding))
-    xmax = min(width, int(bbox[2] + padding))
-    ymax = min(height, int(bbox[3] + padding))
-    
-    # Crop image
-    cropped = img[ymin:ymax, xmin:xmax]
-    return cropped
             
 def create_heatmap():
     """Create heatmap rasters showing observation density for each flight line"""
@@ -147,6 +122,6 @@ def create_heatmap():
 
 if __name__ == '__main__':
     download_report_files()
-    create_heatmap()
+    #create_heatmap()
     # Create vector data
     #optimize_vector("app/data/predictions.csv", "app/data/processed/predictions.shp")

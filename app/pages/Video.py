@@ -1,8 +1,5 @@
 import streamlit as st
 from pathlib import Path
-import cv2
-from PIL import Image
-import numpy as np
 from utils.styling import load_css
 
 def app():
@@ -31,12 +28,6 @@ def app():
         video_path = video_dir / selected_video
         
         try:
-            # Verify video can be opened
-            cap = cv2.VideoCapture(str(video_path))
-            if not cap.isOpened():
-                st.error("Error: Could not open video file")
-                return
-            cap.release()
             
             # Create a video player with explicit mime type
             video_file = open(str(video_path), 'rb')
