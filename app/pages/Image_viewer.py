@@ -23,9 +23,6 @@ def app():
     if 'selected_species' not in st.session_state:
         st.session_state.selected_species = "Bird"
 
-    # Load CSS
-    load_css()
-
     # Use standard Streamlit selector with USWDS styling
     selected_species = st.selectbox(
         "Select a species",
@@ -61,4 +58,5 @@ def app():
         st.image(image_path, caption=f"Model Confidence: {score:.2f}")
 
 if __name__ == "__main__":
+    load_css()
     app()
