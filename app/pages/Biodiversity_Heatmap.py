@@ -2,7 +2,9 @@ import streamlit as st
 import leafmap.foliumap as leafmap
 from pathlib import Path
 import os
+from utils.styling import load_css
 
+# Must be the first Streamlit command
 st.set_page_config(
     page_title="Biodiversity Heatmap",
     page_icon="🗺️",
@@ -57,4 +59,5 @@ def app():
     """)
 
 if __name__ == "__main__":
+    load_css()
     app()

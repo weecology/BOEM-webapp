@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from utils.styling import load_css
 
 report = pd.read_csv("app/data/report.csv")
 #detection_url = report.loc[0, "Detection URL"]
@@ -56,3 +57,6 @@ with col4:
     )
 
 st.markdown(f"For more details, see the [Classification Model Comet Experiment]({classification_url})")
+
+if __name__ == "__main__":
+    load_css()

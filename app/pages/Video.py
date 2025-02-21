@@ -3,6 +3,7 @@ from pathlib import Path
 import cv2
 from PIL import Image
 import numpy as np
+from utils.styling import load_css
 
 def app():
     st.title("Flight Line Video Viewer")
@@ -57,4 +58,5 @@ def app():
             st.error(f"Error processing video: {str(e)}")
 
 if __name__ == "__main__":
+    load_css()
     app()

@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from pathlib import Path
 import seaborn as sns
 import matplotlib.pyplot as plt
+from utils.styling import load_css
 
 def app():
     st.title("Species Analysis")
@@ -121,4 +122,5 @@ def app():
         st.pyplot(fig)
 
 if __name__ == "__main__":
+    load_css()
     app() 

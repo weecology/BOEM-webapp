@@ -5,6 +5,14 @@ import sys
 from pathlib import Path
 import sqlite3
 import pandas as pd
+from utils.styling import load_css
+
+# Must be the first Streamlit command
+st.set_page_config(
+    page_title="Observations",
+    page_icon="🗺️",
+    layout="wide"
+)
 
 # Add the project root to the Python path
 root_dir = str(Path(__file__).parents[2].absolute())
@@ -28,18 +36,11 @@ def load_vector(file_path):
         return gpd.read_file(file_path), None, None, None, None, None
 
 def app():
-    # Reduce default padding
-    st.set_page_config(layout="wide")
-    st.markdown("""
-        <style>
-        .block-container {
-            padding-left: 2rem;
-            padding-right: 2rem;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-    st.title("Observations")
+    # Create the map
+    m = leafmap.Map(
+        center=[40, -70],
+        zoom=6,
+    )
     
     # Get the app's data directory
     app_data_dir = Path(__file__).parents[1] / "data"
@@ -62,7 +63,7 @@ def app():
                 "Confidence Score",  # Shortened label
                 min_value=0.0,
                 max_value=1.0,
-                value=0.5,
+                value=0.25,
                 step=0.05,
                 help="Filter observations by confidence score"
             )
@@ -77,7 +78,6 @@ def app():
     
     with col1:
         # Create map
-        m = leafmap.Map()
         m.add_basemap("OpenStreetMap")
         
         if default_file.exists():
@@ -163,4 +163,5 @@ def process_vector_file(file_path, m, color):
         raise Exception(f"Error processing {file_path.name}: {str(e)}")
 
 if __name__ == "__main__":
+    load_css()
     app()
