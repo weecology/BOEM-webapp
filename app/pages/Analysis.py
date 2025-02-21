@@ -12,7 +12,7 @@ def app():
     app_data_dir = Path(__file__).parents[1] / "data"
     
     # Always use the default data file
-    default_file = app_data_dir / "predictions.csv"
+    default_file = app_data_dir / "video_predictions.csv"
     df = pd.read_csv(default_file)
 
     df["date"] = pd.to_datetime(df["date"])

@@ -22,13 +22,16 @@ with col1:
     - **Human Reviewed**: {int(report.loc[0, 'human_reviewed_images'])}
     - **Completion Rate**: {report.loc[0, 'completion_rate']:.2%}
     """)
-
-with col2:
     st.subheader("Prediction Stats")
     detection_map = float(report.loc[0, 'detection_map'].replace('tensor(', '').replace(')', ''))
     st.markdown(f"""
     - **Confident Predictions**: {int(report.loc[0, 'confident_predictions'])}
     - **Uncertain Predictions**: {int(report.loc[0, 'uncertain_predictions'])}
+    """)
+
+with col2:
+    st.subheader("Detection Performance")
+    st.markdown(f"""
     - **Detection mAP**: {detection_map:.3f}
     """)
 
@@ -52,4 +55,4 @@ with col4:
         value=f"{uncertain_accuracy:.1%}"
     )
 
-st.markdown(f"For more details, see the [Classification Report Confusion Matrix]({classification_url + '?experiment-tab=confusionMatrix'})")
+st.markdown(f"For more details, see the [Classification Model Comet Experiment]({classification_url})")
