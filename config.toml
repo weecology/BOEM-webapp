@@ -1,17 +1,19 @@
 [server]
 maxUploadSize = 600
 maxMessageSize = 600
+enableCORS = false
+enableXsrfProtection = false
+address = "0.0.0.0"  # Important: Listen on all interfaces
+port = 8501
 
 [global]
 dataFrameSerialization = "arrow"
-# Increase memory management settings
 minCachedDataBytes = 10000000
 maxCachedDataBytes = 1000000000
 
 [browser]
 gatherUsageStats = false
-serverAddress = "localhost"
-serverPort = 8501
+serverAddress = "0.0.0.0"  # Changed from localhost
 
 [theme]
 primaryColor = "#0066cc"
@@ -20,5 +22,4 @@ secondaryBackgroundColor = "#f0f2f6"
 textColor = "#262730"
 
 [runner]
-# Increase memory limits
 memory_limit = "4096mb"
