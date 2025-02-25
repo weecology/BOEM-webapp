@@ -15,4 +15,3 @@ streamlit-file-browser
 seaborn
 watchdog
 xarray
-threading
