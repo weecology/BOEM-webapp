@@ -1,0 +1,2 @@
+timestamp,model_name,total_annotations,confident_predictions,uncertain_predictions,detection_map,human_reviewed_images,total_images,completion_rate,confident_classification_accuracy,uncertain_classification_accuracy
+2025-02-20 20:02:18,deepforest,6,0,3,tensor(0.),3,59572,5.0359229168065536e-05,tensor(0.),tensor(0.)
