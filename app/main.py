@@ -42,7 +42,7 @@ st.markdown("""
 """)
 
 # Read the data
-data_path = Path(__file__).parent / "data" / "predictions.csv"
+data_path = Path(__file__).parent / "data" / "validation_predictions.csv"
 
 if not data_path.exists():
     st.error(f"File not found: {data_path}")

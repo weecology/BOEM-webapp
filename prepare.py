@@ -2,24 +2,43 @@ import requests
 from pathlib import Path
 import zipfile
 import io
-import pandas as pd
+from bs4 import BeautifulSoup
 
-def get_newest_report_url():
-    """Find the newest timestamped zip file from the web server"""
+def list_server_files():
+    """List all files and directories on the web server"""
     base_url = "https://data.rc.ufl.edu/pub/ewhite/BOEM"
     response = requests.get(f"{base_url}/")
     
     if response.status_code != 200:
         raise Exception("Could not access web server")
     
-    # Parse the directory listing for zip files and their timestamps
-    # This is a simplified version - you may need to adjust based on actual server response
-    files = [line for line in response.text.split('\n') if line.endswith('.zip')]
-    if not files:
+    # Use BeautifulSoup to parse the HTML directory listing
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # Find all links in the page
+    files = []
+    for link in soup.find_all('a'):
+        href = link.get('href')
+        if href and not href.startswith('?') and not href.startswith('/pub/ewhite/'):
+            # Remove URL encoding and trailing slashes
+            filename = href.replace('%5F', '_').rstrip('/')
+            files.append(filename)
+            
+    return files
+
+def get_newest_report_url():
+    """Find the newest timestamped zip file from the web server"""
+    base_url = "https://data.rc.ufl.edu/pub/ewhite/BOEM"
+    files = list_server_files()
+    
+    # Filter for zip files only
+    zip_files = [f for f in files if f.endswith('.zip')]
+            
+    if not zip_files:
         raise Exception("No zip files found on server")
     
     # Get newest file (assuming filenames contain timestamps)
-    newest_file = sorted(files)[-1]
+    newest_file = sorted(zip_files)[-1]
     return f"{base_url}/{newest_file}"
 
 def download_report_files():
@@ -47,81 +66,15 @@ def download_report_files():
     except Exception as e:
         print(f'Error downloading report files: {str(e)}')
         raise
-            
-def create_heatmap():
-    """Create heatmap rasters showing observation density for each flight line"""
-    import geopandas as gpd
-    import numpy as np
-    from shapely.geometry import box
-    import rasterio
-    from rasterio.transform import from_bounds
-    import os
-    from pathlib import Path
-
-    # Read the shapefile
-    gdf = gpd.read_file("app/data/predictions.shp")
-    
-    # Get unique flight lines
-    flight_lines = gdf['flight_nam'].unique()
-
-    # Create output directory if it doesn't exist
-    output_dir = Path("app/data/heatmaps")
-    output_dir.mkdir(exist_ok=True)
-
-    for flight in flight_lines:
-        # Filter data for this flight
-        flight_data = gdf[gdf['flight_nam'] == flight]
-        
-        if len(flight_data) == 0:
-            continue
-            
-        # Get bounds of flight line
-        minx, miny, maxx, maxy = flight_data.total_bounds
-        
-        # Create grid
-        cell_size = 0.001  # Adjust cell size as needed
-        nx = int((maxx - minx) / cell_size)
-        ny = int((maxy - miny) / cell_size)
-        
-        # Initialize empty array
-        heatmap = np.zeros((ny, nx))
-        
-        # Create transform for raster
-        transform = from_bounds(minx, miny, maxx, maxy, nx, ny)
-        
-        # Count points in each grid cell
-        for idx, row in flight_data.iterrows():
-            # Get point coordinates
-            x, y = row.geometry.x, row.geometry.y
-            
-            # Convert to array indices
-            col = int((x - minx) / cell_size)
-            row = int((y - miny) / cell_size)
-            
-            # Increment count if within bounds
-            if 0 <= row < ny and 0 <= col < nx:
-                heatmap[row, col] += 1
-        
-        # Save as GeoTIFF
-        output_path = output_dir / f"{flight}_heatmap.tif"
-        
-        with rasterio.open(
-            output_path,
-            'w',
-            driver='GTiff',
-            height=ny,
-            width=nx,
-            count=1,
-            dtype=heatmap.dtype,
-            crs=gdf.crs,
-            transform=transform
-        ) as dst:
-            dst.write(heatmap, 1)
-            
-        print(f"Created heatmap for flight {flight}")
 
 if __name__ == '__main__':
+    # List all files
+    files = list_server_files()
+    print("\nFiles on server:")
+    for file in files:
+        print(file)
+    
+    # Download newest report
     download_report_files()
-    #create_heatmap()
     # Create vector data
     #optimize_vector("app/data/predictions.csv", "app/data/processed/predictions.shp")

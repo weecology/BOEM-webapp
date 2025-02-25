@@ -1,6 +1,5 @@
 import shutil
 from pathlib import Path
-import os
 
 def setup_static_files():
     # Define paths

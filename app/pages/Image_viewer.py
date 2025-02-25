@@ -10,7 +10,7 @@ def app():
     st.title("Image Viewer")
 
     # Read the data to get species list
-    data_path = Path("app/data/predictions.csv")
+    data_path = Path("app/data/validation_predictions.csv")
 
     df = pd.read_csv(data_path)
     df = df.dropna(subset=['label'])
