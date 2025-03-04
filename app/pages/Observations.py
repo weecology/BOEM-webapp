@@ -51,7 +51,7 @@ def app():
     # Add controls in col2 first
     with col2:
         # Load data first to get unique labels
-        default_file = app_data_dir / "predictions.shp"
+        default_file = app_data_dir / "most_recent_all_flight_predictions.shp"
         if default_file.exists():
             gdf = gpd.read_file(default_file)
             # drop na labels

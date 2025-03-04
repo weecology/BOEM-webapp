@@ -13,41 +13,19 @@ def app():
     app_data_dir = Path(__file__).parents[1] / "data"
     
     # Always use the default data file
-    default_file = app_data_dir / "video_predictions.csv"
+    default_file = app_data_dir / "most_recent_all_flight_predictions.csv"
     df = pd.read_csv(default_file)
 
     df["date"] = pd.to_datetime(df["date"])
     df["count"] = 1
+    
     # Add tabs for different visualizations
-    tab1, tab2, tab3 = st.tabs([
-        "Species Distribution", 
+    tab1, tab2 = st.tabs([
         "Temporal Analysis",
         "Flight Analysis"
     ])
     
     with tab1:
-        st.subheader("Species Distribution")
-        
-        # Top N species by count
-        n_species = 10
-        
-        # Create species count plot
-        
-        species_counts = df.groupby('label').size().sort_values(ascending=False).head(n_species)
-        
-        fig = px.bar(
-            x=species_counts.index,
-            y=species_counts.values,
-            title=f"Top {n_species} Most Common Bird Species",
-            labels={'x': 'Species', 'y': 'Total Count'}
-        )
-        fig.update_layout(
-            xaxis_tickangle=-45,
-            height=500,
-            width=800
-        )
-        st.plotly_chart(fig)
-    with tab2:
         st.subheader("Temporal Analysis")
         
         # Add month and year columns
@@ -86,7 +64,7 @@ def app():
         plt.xticks(rotation=45)
         st.pyplot(fig)
     
-    with tab3:
+    with tab2:
         st.subheader("Site Analysis")
         
         # Site distribution
