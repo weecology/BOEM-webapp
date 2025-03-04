@@ -1,9 +1,8 @@
 import streamlit as st
 from pathlib import Path
 from PIL import Image
-import numpy as np
 from utils.styling import load_css
-from utils.comet_utils import get_comet_experiments
+import pandas as pd
 
 # Must be the first Streamlit command
 st.set_page_config(
@@ -17,9 +16,7 @@ def app():
     
     try:
         # Get experiment data
-        with st.spinner('Loading experiment data from Comet.ml...'):
-            _, _, image_df = get_comet_experiments()
-            
+        image_df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
         if image_df is None:
             st.warning("No images found in experiments")
             return

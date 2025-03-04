@@ -7,10 +7,10 @@ if __name__ == '__main__':
     get_comet_experiments()
 
     # Create shapefiles
-    latest_predictions = pd.read_csv("app/data/processed/most_recent_all_flight_predictions.csv")
-    create_shapefiles(latest_predictions, "app/data/processed/metadata.csv","app/data/processed/most_recent_all_flight_predictions.shp")
+    latest_predictions = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
+    create_shapefiles(latest_predictions, "app/data/metadata.csv")
 
     # Download images
-    latest_run = pd.read_csv("app/data/processed/most_recent_all_flight_predictions.csv")
+    latest_run = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
     val_predictions = latest_run[latest_run['set'] == 'test']
     download_images(val_predictions)

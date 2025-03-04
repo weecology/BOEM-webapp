@@ -16,9 +16,9 @@ def app():
     flight_name = st.selectbox("Select Flight Name", metrics_df["flight_name"].unique(),default=metrics_df["flight_name"].unique()[0])
 
     # Get experiment data
-    metrics_df = pd.read_csv("app/data/processed/metrics.csv")
-    predictions_df = pd.read_csv(f"app/data/processed/predictions.csv")
-    label_counts_df = pd.read_csv("app/data/processed/label_counts.csv")
+    metrics_df = pd.read_csv("app/data/metrics.csv")
+    predictions_df = pd.read_csv(f"app/data/predictions.csv")
+    label_counts_df = pd.read_csv("app/data/label_counts.csv")
 
     # Filter metrics and predictions for selected flight name
     metrics_df = metrics_df[metrics_df["flight_name"] == flight_name]
