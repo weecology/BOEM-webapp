@@ -112,3 +112,5 @@ Thumbs.db
 
 # Project specific
 *.cache/*
+*.comet.config
+
