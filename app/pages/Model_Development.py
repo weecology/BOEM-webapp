@@ -1,7 +1,10 @@
 import streamlit as st
 from utils.styling import load_css
 import pandas as pd
-from utils.comet_utils import get_comet_experiments, create_metric_plots, create_label_count_plots
+import plotly.express as px
+import seaborn as sns
+import matplotlib.pyplot as plt
+from pathlib import Path
 
 st.set_page_config(
     page_title="Model Development",
@@ -9,45 +12,68 @@ st.set_page_config(
     layout="wide"
 )
 
+def create_metric_plots(metrics_df):
+    """Create plots showing metric improvement over time"""
+    # Line plot for each metric over time
+    fig_metrics = px.line(
+        metrics_df,
+        x='timestamp',
+        y='metricValue',
+        facet_col='metricName',
+        title='Metrics Over Time'
+    )
+    
+    return fig_metrics
+
+def create_prediction_plots(predictions_df):
+    """Create plots showing prediction distributions"""
+    if predictions_df is None:
+        return None
+        
+    # Count predictions by type and experiment
+    pred_counts = predictions_df.groupby(['timestamp', 'set']).size().reset_index(name='count')
+    
+    fig_preds = px.bar(
+        pred_counts,
+        x='timestamp',
+        y='count',
+        color='set',
+        title='Predictions by Set',
+        barmode='group'
+    )
+    
+    return fig_preds 
+
+
 def app():
     st.title("Model Development Metrics")
-    
+    metrics_df = pd.read_csv("app/data/metrics.csv")
+
     #Flight name dropdown
-    flight_name = st.selectbox("Select Flight Name", metrics_df["flight_name"].unique(),default=metrics_df["flight_name"].unique()[0])
+    flight_name = st.selectbox("Select Flight Name", metrics_df["flight_name"].unique())
 
     # Get experiment data
     metrics_df = pd.read_csv("app/data/metrics.csv")
-    predictions_df = pd.read_csv(f"app/data/predictions.csv")
-    label_counts_df = pd.read_csv("app/data/label_counts.csv")
 
     # Filter metrics and predictions for selected flight name
     metrics_df = metrics_df[metrics_df["flight_name"] == flight_name]
-    predictions_df = predictions_df[predictions_df["flight_name"] == flight_name]
 
     # Create and display metrics plot
     st.subheader("Training Metrics")
     metrics_plot = create_metric_plots(metrics_df)
     st.plotly_chart(metrics_plot, use_container_width=True)
+
+    # Display raw data in expandable sections
+    with st.expander("View Raw Metrics Data"):
+        st.dataframe(metrics_df[['metricName', 'metricValue', 'timestamp', 'flight_name']])
     
-    # Create and display label distribution plots
-    if label_counts_df is not None:
-        st.subheader("Label Distribution Analysis")
-        time_plot, hist_plot = create_label_count_plots(label_counts_df)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(time_plot, use_container_width=True)
-        with col2:
-            st.plotly_chart(hist_plot, use_container_width=True)
-        
-        # Display raw data in expandable sections
-        with st.expander("View Raw Metrics Data"):
-            st.dataframe(metrics_df)
-        
-        with st.expander("View Raw Label Counts Data"):
-            st.dataframe(label_counts_df)
-
-
+    # Create and display predictions plot
+    st.subheader("Predictions")
+    predictions_df = pd.read_csv("app/data/predictions.csv")
+    predictions_plot = create_prediction_plots(predictions_df)
+    st.plotly_chart(predictions_plot, use_container_width=True)
+    
+    
 if __name__ == "__main__":
     load_css()
     app()

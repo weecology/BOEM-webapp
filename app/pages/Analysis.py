@@ -16,7 +16,7 @@ def app():
     default_file = app_data_dir / "most_recent_all_flight_predictions.csv"
     df = pd.read_csv(default_file)
 
-    df["date"] = pd.to_datetime(df["date"])
+    df["date"] = pd.to_datetime(df["timestamp"])
     df["count"] = 1
     
     # Add tabs for different visualizations
@@ -25,6 +25,25 @@ def app():
         "Flight Analysis"
     ])
     
+    df["month"] = df["date"].dt.month
+    df["year"] = df["date"].dt.year
+    df["monthyear"] = df["date"].dt.strftime('%Y-%m')
+    label_counts_df = df.groupby(['monthyear']).size().reset_index(name='count')
+
+    # Create time series plot of label counts
+    fig_timeseries = px.line(
+        label_counts_df,
+        x='monthyear',
+        y='count',
+        title='Label Counts Over Time',
+        labels={'count': 'Number of Instances', 'monthyear': 'Month-Year'}
+    )
+    
+    st.plotly_chart(fig_timeseries)
+
+    with st.expander("View Raw Label Counts Data"):
+        st.dataframe(label_counts_df)
+
     with tab1:
         st.subheader("Temporal Analysis")
         
@@ -65,7 +84,7 @@ def app():
         st.pyplot(fig)
     
     with tab2:
-        st.subheader("Site Analysis")
+        st.subheader("Flight Analysis")
         
         # Site distribution
         site_counts = df.groupby('flight_name').size().sort_values(ascending=False)

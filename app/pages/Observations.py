@@ -51,12 +51,12 @@ def app():
     # Add controls in col2 first
     with col2:
         # Load data first to get unique labels
-        default_file = app_data_dir / "most_recent_all_flight_predictions.shp"
+        default_file = app_data_dir / "all_predictions.shp"
         if default_file.exists():
             gdf = gpd.read_file(default_file)
             # drop na labels
-            gdf = gdf[gdf['label'].notna()]
-            unique_labels = sorted(gdf['label'].unique())
+            gdf = gdf[gdf['cropmodel_'].notna()]
+            unique_labels = sorted(gdf['cropmodel_'].unique())
             
             # Add score threshold slider
             score_threshold = st.slider(
@@ -85,16 +85,31 @@ def app():
                 # Filter data based on both score threshold and selected labels
                 filtered_gdf = gdf[
                     (gdf['score'] >= score_threshold) & 
-                    (gdf['label'].isin(selected_labels))
+                    (gdf['cropmodel_'].isin(selected_labels))
                 ]
                 
                 if len(filtered_gdf) == 0:
                     st.warning("No observations meet the selected filters")
                 else:
+                    # Create popup with image and metadata
+                    filtered_gdf['popup'] = filtered_gdf.apply(
+                        lambda x: f"""
+                        <div style="width:300px">
+                            <img src="{x['crop_api_path']}" width="100%"/>
+                            <p><b>Species:</b> {x['cropmodel_']}</p>
+                            <p><b>Score:</b> {x['score']:.2f}</p>
+                        </div>
+                        """, 
+                        axis=1
+                    )
+                    
+                    # Add GeoDataFrame with popup
                     m.add_gdf(
                         filtered_gdf,
                         layer_name=f"Observations (score ≥ {score_threshold})",
-                        style={'fillColor': "#0000FF"}
+                        style={'fillColor': "#0000FF"},
+                        popup=filtered_gdf['popup'].tolist(),
+                        tooltip=filtered_gdf['cropmodel_'].tolist()
                     )
             except Exception as e:
                 st.error(f"Error processing vector data: {str(e)}")

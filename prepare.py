@@ -12,5 +12,5 @@ if __name__ == '__main__':
 
     # Download images
     latest_run = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
-    val_predictions = latest_run[latest_run['set'] == 'test']
-    download_images(val_predictions)
+    for experiment in latest_run['experiment'].unique():
+        download_images(experiment)
