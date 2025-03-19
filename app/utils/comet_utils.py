@@ -109,8 +109,11 @@ def download_validation_images(experiment, save_dir='app/data/images'):
     # Download each image
     image_data = []
     for asset in image_assets:
+        if asset["metadata"] is None:
+            continue
+
         # Get image name and data
-        if not "validation" in asset["metadata"]["context"]:
+        if not "validation" in asset["metadata"]:
             continue
 
         image_name = asset['fileName']
