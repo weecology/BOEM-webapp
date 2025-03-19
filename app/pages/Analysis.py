@@ -71,7 +71,7 @@ def app():
         # Species by month heatmap
         monthly_species = df.pivot_table(
             index='MonthYear',
-            columns='label',
+            columns='cropmodel_label',
             values='count',
             aggfunc='sum',
             fill_value=0
@@ -106,7 +106,7 @@ def app():
         df["count"] = 1
         flight_species = df.pivot_table(
             index='flight_name',
-            columns='label',
+            columns='cropmodel_label',
             values='count',
             aggfunc='sum',
             fill_value=0

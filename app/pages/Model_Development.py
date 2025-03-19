@@ -74,6 +74,25 @@ def create_prediction_plots(predictions_df):
     
     return fig, label_percentages
 
+def create_comet_links(experiment_id):
+    """Create HTML links to different Comet dashboard views"""
+    base_url = "https://www.comet.com/bw4sz/boem/"
+    
+    links = {
+        'Detection Images': f"{base_url}{experiment_id}?experiment-tab=images&groupBy=metadata%25_context&orderBy=desc&sortBy=metadata%25_context",
+        'Confusion Matrix': f"{base_url}{experiment_id}?experiment-tab=confusionMatrix",
+        'Loss Curves': f"{base_url}{experiment_id}?experiment-tab=charts",
+        'Classification Images': f"{base_url}{experiment_id}?experiment-tab=images&groupBy=metadata%25_context&orderBy=desc&sortBy=metadata%25_context&query=classification"
+    }
+    
+    # Create HTML links
+    html_links = {
+        k: f'<a href="{v}" target="_blank">{k}</a>'
+        for k, v in links.items()
+    }
+    
+    return html_links
+
 def app():
     st.title("Model Development Metrics")
     metrics_df = pd.read_csv("app/data/metrics.csv")
@@ -108,6 +127,34 @@ def app():
             percentages_df.style.format("{:.2f}%"),
             height=400
         )
+
+    # Create experiment links table at the bottom
+    st.subheader("Comet.ml Dashboard Links")
+    
+    # Get unique experiments
+    experiments = metrics_df[['experiment', 'flight_name']].drop_duplicates()
+    
+    # Create links for each experiment
+    links_data = []
+    for _, row in experiments.iterrows():
+        links = create_comet_links(row['experiment'])
+        links_data.append({
+            'Flight': row['flight_name'],
+            'Experiment ID': row['experiment'],
+            **links
+        })
+    
+    # Create DataFrame with links
+    links_df = pd.DataFrame(links_data)
+    
+    # Display as HTML table
+    st.write(
+        links_df.to_html(
+            escape=False,
+            index=False
+        ),
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     load_css()
