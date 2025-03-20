@@ -78,6 +78,10 @@ def get_comet_experiments():
     # More recent prediction for each flight_name
     flight_dates = all_predictions.groupby('flight_name').agg({'timestamp': 'max'}).reset_index()
     most_recent_predictions = all_predictions[all_predictions.timestamp.isin(flight_dates["timestamp"])]
+
+    # Drop FalsePositive and '0' from the label column
+    most_recent_predictions = most_recent_predictions[most_recent_predictions['cropmodel_label'] != 'FalsePositive']
+    most_recent_predictions = most_recent_predictions[most_recent_predictions['cropmodel_label'] != '0']
     most_recent_predictions.to_csv("app/data/most_recent_all_flight_predictions.csv", index=False)
 
 def create_shapefiles(annotations, metadata):

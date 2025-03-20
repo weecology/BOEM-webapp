@@ -24,7 +24,10 @@ def create_label_count_plots(label_counts_df):
                                          ]).size().reset_index(name='count')
     counts_df.columns = ['set', 'label', 'count']
 
-    print(counts_df)
+    # remove FalsePositive and '0' from the label column
+    counts_df = counts_df[counts_df['label'] != 'FalsePositive']
+    counts_df = counts_df[counts_df['label'] != '0']
+
     fig_hist = px.bar(counts_df,
                       x='label',
                       y='count',

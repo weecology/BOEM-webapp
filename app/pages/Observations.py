@@ -6,6 +6,7 @@ from pathlib import Path
 import sqlite3
 import pandas as pd
 from utils.styling import load_css
+import os
 
 # Must be the first Streamlit command
 st.set_page_config(
@@ -91,25 +92,32 @@ def app():
                 if len(filtered_gdf) == 0:
                     st.warning("No observations meet the selected filters")
                 else:
-                    # Create popup with image and metadata
-                    filtered_gdf['popup'] = filtered_gdf.apply(
-                        lambda x: f"""
-                        <div style="width:300px">
-                            <img src="{x['crop_api_path']}" width="100%"/>
-                            <p><b>Species:</b> {x['cropmodel_']}</p>
-                            <p><b>Score:</b> {x['score']:.2f}</p>
-                        </div>
-                        """, 
-                        axis=1
-                    )
                     
-                    # Add GeoDataFrame with popup
+                    # Create a new column with HTML hyperlink with API key
+                    api_key = os.getenv('COMET_API_KEY')
+                    filtered_gdf['image_link'] = filtered_gdf['crop_api_p'].apply(
+                        lambda x: f'<a href="{x}&apiKey={api_key}" target="_blank">View Image</a>'
+                    )
+
+                    # Give saner names
+                    filtered_gdf = filtered_gdf[['score', 'cropmodel_', 'cropmode_1', 'set', 
+                                    'flight_n_1', 'date', 'lat', 'long', 'image_link', 'geometry']].rename(columns={
+                        'score': 'Detection Score',
+                        'cropmodel_': 'Species',
+                        'cropmode_1': 'Species Confidence',
+                        'set': 'Set',
+                        'flight_n_1': 'Flight Name',
+                        'date': 'Date',
+                        'lat': 'Latitude',
+                        'long': 'Longitude',
+                        'image_link': 'View Image'
+                    })
                     m.add_gdf(
                         filtered_gdf,
                         layer_name=f"Observations (score ≥ {score_threshold})",
-                        style={'fillColor': "#0000FF"},
-                        popup=filtered_gdf['popup'].tolist(),
-                        tooltip=filtered_gdf['cropmodel_'].tolist()
+                        style={'color': "#0000FF"},
+                        info_mode='on_click',
+                        hover_style={'sticky': True}
                     )
             except Exception as e:
                 st.error(f"Error processing vector data: {str(e)}")
