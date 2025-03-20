@@ -93,7 +93,7 @@ def create_shapefiles(annotations, metadata):
     # All together as one shapefile
     merged_predictions = annotations.merge(metadata_df[["unique_image", "flight_name","date","lat","long"]], on='unique_image')
     gdf = gpd.GeoDataFrame(merged_predictions, geometry=gpd.points_from_xy(merged_predictions.long, merged_predictions.lat))
-    gdf.to_file("app/data/all_predictions.shp", driver='ESRI Shapefile')
+    gdf.to_file("app/data/all_predictions.shp", driver='ESRI Shapefile', crs="EPSG:4326")
 
 def download_validation_images(experiment, save_dir='app/data/images'):
     """Download all images logged to a Comet experiment"""
