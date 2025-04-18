@@ -84,10 +84,10 @@ with col1:
 with col2:
     # Display basic statistics
     st.header("Statistics")
-    st.write(f"Current Flight: {df['flight_name'].unique()[0]}")
-    st.write(f"Total Records: {len(df)}")
-    st.write(f"Number of Species: {df['label'].nunique()}")
-    st.write(f"Total Sites: {df['flight_name'].nunique()}")
+    st.write(f"Current Flight: {df['flight_name'].unique()[-1]}")
+    st.write(f"Total Observations: {len(df)}")
+    st.write(f"Number of Species: {df['cropmodel_label'].nunique()}")
+    st.write(f"Total Flights: {df['flight_name'].nunique()}")
     st.write(f"Date Range: {df['timestamp'].min().strftime('%Y-%m-%d')} to {df['timestamp'].max().strftime('%Y-%m-%d')}")
 
 # Create and display label distribution plots

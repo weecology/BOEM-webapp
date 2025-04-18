@@ -21,8 +21,8 @@ def app():
     
     # Add tabs for different visualizations
     tab1, tab2 = st.tabs([
-        "Temporal Analysis",
-        "Flight Analysis"
+        "Flight Analysis",
+        "Temporal Analysis"
     ])
     
     df["month"] = df["date"].dt.month
@@ -45,6 +45,41 @@ def app():
         st.dataframe(label_counts_df)
 
     with tab1:
+        st.subheader("Flight Analysis")
+        
+        # Site distribution
+        site_counts = df.groupby('flight_name').size().sort_values(ascending=False)
+        
+        fig_sites = px.bar(
+            x=site_counts.index,
+            y=site_counts.values,
+            title="Bird Counts by Flight",
+            labels={'x': 'Flight', 'y': 'Total Count'}
+        )
+        fig_sites.update_layout(
+            xaxis_tickangle=-45,
+            height=500,
+            width=800
+        )
+        st.plotly_chart(fig_sites)
+        
+        # Species distribution by flight
+        df["count"] = 1
+        flight_species = df.pivot_table(
+            index='flight_name',
+            columns='cropmodel_label',
+            values='count',
+            aggfunc='sum',
+            fill_value=0
+        )
+        
+        fig, ax = plt.subplots(figsize=(12, 8))
+        sns.heatmap(flight_species, cmap='YlOrRd', ax=ax)
+        plt.title("Species Distribution by Flight")
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
+    
+    with tab2:
         st.subheader("Temporal Analysis")
         
         # Add month and year columns
@@ -80,41 +115,6 @@ def app():
         fig, ax = plt.subplots(figsize=(12, 8))
         sns.heatmap(monthly_species, cmap='YlOrRd', ax=ax)
         plt.title("Species Distribution by Month")
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
-    
-    with tab2:
-        st.subheader("Flight Analysis")
-        
-        # Site distribution
-        site_counts = df.groupby('flight_name').size().sort_values(ascending=False)
-        
-        fig_sites = px.bar(
-            x=site_counts.index,
-            y=site_counts.values,
-            title="Bird Counts by Flight",
-            labels={'x': 'Flight', 'y': 'Total Count'}
-        )
-        fig_sites.update_layout(
-            xaxis_tickangle=-45,
-            height=500,
-            width=800
-        )
-        st.plotly_chart(fig_sites)
-        
-        # Species distribution by flight
-        df["count"] = 1
-        flight_species = df.pivot_table(
-            index='flight_name',
-            columns='cropmodel_label',
-            values='count',
-            aggfunc='sum',
-            fill_value=0
-        )
-        
-        fig, ax = plt.subplots(figsize=(12, 8))
-        sns.heatmap(flight_species, cmap='YlOrRd', ax=ax)
-        plt.title("Species Distribution by Flight")
         plt.xticks(rotation=45)
         st.pyplot(fig)
 

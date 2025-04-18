@@ -72,11 +72,8 @@ def get_comet_experiments():
                 metrics_df["flight_name"] = flight_name
                 metrics_data.append(metrics_df)
 
-                # Write to csv
-                pd.concat(metrics_data).to_csv("app/data/metrics.csv", index=False)
-
             # Get final predictions
-            final_predictions = exp.get_asset_by_name('final_predictions.csv')
+            final_predictions = exp.get_asset_by_name('final_predictions.csv', asset_type='dataframe')
             final_predictions = pd.read_csv(io.BytesIO(final_predictions))
             final_predictions["flight_name"] = flight_name
             final_predictions["experiment"] = exp.name
@@ -88,6 +85,9 @@ def get_comet_experiments():
 
     all_predictions = pd.concat(all_predictions)
     all_predictions.to_csv("app/data/predictions.csv", index=False)
+
+    # Write to csv
+    pd.concat(metrics_data).to_csv("app/data/metrics.csv", index=False)
 
     # More recent prediction for each flight_name
     flight_dates = all_predictions.groupby('flight_name').agg({
@@ -129,8 +129,7 @@ def download_validation_images(experiment, save_dir='app/data/images'):
     experiment = api.get(f"{workspace}/boem",experiment=experiment)
 
     # Get all assets that are images
-    assets = experiment.get_asset_list()
-    image_assets = [a for a in assets if a['type'] == 'image']
+    image_assets = experiment.get_asset_list(type='image')
 
     # Download each image
     image_data = []
