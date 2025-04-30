@@ -8,13 +8,6 @@ import pandas as pd
 from utils.styling import load_css
 import os
 
-# Must be the first Streamlit command
-st.set_page_config(
-    page_title="Observations",
-    page_icon="🗺️",
-    layout="wide"
-)
-
 # Add the project root to the Python path
 root_dir = str(Path(__file__).parents[2].absolute())
 if root_dir not in sys.path:

@@ -6,12 +6,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-st.set_page_config(
-    page_title="Model Development",
-    page_icon="📈",
-    layout="wide"
-)
-
 def create_metric_plots(metrics_df):
     """Create plots showing metric improvement over time"""
     # Line plot for each metric over time
@@ -24,55 +18,6 @@ def create_metric_plots(metrics_df):
     )
     
     return fig_metrics
-
-def create_prediction_plots(predictions_df):
-    """Create plots showing prediction distributions"""
-    if predictions_df is None:
-        return None
-    
-    # Convert timestamp to datetime
-    predictions_df['timestamp'] = pd.to_datetime(predictions_df['timestamp'])
-    
-    # Calculate total counts per timestamp
-    total_counts = predictions_df.groupby('timestamp').size()
-    
-    # Calculate percentage for each label at each timestamp
-    label_percentages = predictions_df.groupby(['timestamp', 'cropmodel_label']).size().unstack(fill_value=0)
-    label_percentages = label_percentages.div(total_counts, axis=0) * 100
-    
-    # Melt the dataframe for plotting
-    plot_df = label_percentages.reset_index().melt(
-        id_vars=['timestamp'],
-        var_name='Species',
-        value_name='Percentage'
-    )
-    
-    # Create line plot
-    fig = px.line(
-        plot_df,
-        x='timestamp',
-        y='Percentage',
-        color='Species',
-        title='Species Composition Over Time',
-        labels={
-            'timestamp': 'Date',
-            'Percentage': 'Percentage of Total Predictions',
-            'Species': 'Species'
-        }
-    )
-    
-    fig.update_layout(
-        height=600,
-        xaxis_tickangle=-45,
-        legend=dict(
-            yanchor="top",
-            y=0.99,
-            xanchor="left",
-            x=1.02
-        )
-    )
-    
-    return fig, label_percentages
 
 def create_comet_links(experiment_id):
     """Create HTML links to different Comet dashboard views"""
@@ -114,19 +59,6 @@ def app():
     # Display raw data in expandable sections
     with st.expander("View Raw Metrics Data"):
         st.dataframe(metrics_df[['metricName', 'metricValue', 'timestamp', 'flight_name']])
-    
-    # Create and display predictions plot
-    st.subheader("Species Composition")
-    predictions_df = pd.read_csv("app/data/predictions.csv")
-    predictions_plot, percentages_df = create_prediction_plots(predictions_df)
-    st.plotly_chart(predictions_plot, use_container_width=True)
-    
-    # Display the percentage data
-    with st.expander("View Species Percentages Data"):
-        st.dataframe(
-            percentages_df.style.format("{:.2f}%"),
-            height=400
-        )
 
     # Create experiment links table at the bottom
     st.subheader("Comet.ml Dashboard Links")

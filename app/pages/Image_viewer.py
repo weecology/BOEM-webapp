@@ -4,13 +4,6 @@ from PIL import Image
 from utils.styling import load_css
 import pandas as pd
 
-# Must be the first Streamlit command
-st.set_page_config(
-    page_title="Image Viewer",
-    page_icon="🖼️",
-    layout="wide"
-)
-
 def app():
     st.title("Model Prediction Viewer")
     st.text("This page shows validation images and predictions for the latest model")
