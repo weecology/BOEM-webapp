@@ -53,7 +53,7 @@ def app():
         fig_sites = px.bar(
             x=site_counts.index,
             y=site_counts.values,
-            title="Bird Counts by Flight",
+            title="Biodiversity Counts by Flight",
             labels={'x': 'Flight', 'y': 'Total Count'}
         )
         fig_sites.update_layout(

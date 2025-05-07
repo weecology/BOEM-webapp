@@ -129,7 +129,7 @@ def download_validation_images(experiment, save_dir='app/data/images'):
     experiment = api.get(f"{workspace}/boem",experiment=experiment)
 
     # Get all assets that are images
-    image_assets = experiment.get_asset_list(type='image')
+    image_assets = experiment.get_asset_list(asset_type='image')
 
     # Download each image
     image_data = []

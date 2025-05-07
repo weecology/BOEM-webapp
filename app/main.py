@@ -13,7 +13,7 @@ from pages.Observations import app as observations_app
 from pages.Image_viewer import app as image_viewer_app
 
 st.set_page_config(
-    page_title="BOEM Wildlife Detector",
+    page_title="Bureau of Ocean Energy Management - Gulf of Mexico Biodiversity Survey",
     page_icon="🦅",
     layout="wide"
 )
@@ -72,9 +72,8 @@ if page == "Home":
     df = pd.read_csv(data_path)
     df["timestamp"] = pd.to_datetime(df["timestamp"])
 
-    st.title("BOEM Wildlife Detector")
-    st.text("Welcome to the BOEM Offshore Biodiversity Survey Data Viewer")
-    st.text("This application provides tools for visualizing and analyzing biodiversity data collected during aerial surveys of offshore wind energy areas.")
+    st.title("Bureau of Ocean Energy Management - Gulf of Mexico Biodiversity Survey")
+    st.text("This application provides tools for visualizing and analyzing biodiversity data collected during aerial surveys of offshore energy development areas. The tool uses AI to detect and classify marine wildlife species in aerial images. These data are used to inform the development of offshore projects using rapid and cost-effective surveys.")
     col1, col2 = st.columns(2)
 
     with col1:
