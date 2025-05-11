@@ -11,6 +11,7 @@ from pages.Model_Development import app as model_development_app
 from pages.Analysis import app as analysis_app
 from pages.Observations import app as observations_app
 from pages.Image_viewer import app as image_viewer_app
+from pages.Bulk_Labeling import app as bulk_labeling_app
 
 st.set_page_config(
     page_title="Bureau of Ocean Energy Management - Gulf of Mexico Biodiversity Survey",
@@ -22,7 +23,7 @@ st.set_page_config(
 st.sidebar.title("Navigation")
 page = st.sidebar.radio(
     "Go to",
-    ["Home", "Species Composition", "Model Development", "Analysis", "Observations", "Image Viewer"]
+    ["Home", "Species Composition", "Model Development", "Analysis", "Observations", "Image Viewer", "Bulk Labeling"]
 )
 
 if page == "Home":
@@ -119,3 +120,5 @@ elif page == "Observations":
     observations_app()
 elif page == "Image Viewer":
     image_viewer_app()
+elif page == "Bulk Labeling":
+    bulk_labeling_app()
