@@ -9,7 +9,14 @@ def app():
     st.text("This page shows validation images and predictions for the latest model")
     # Get experiment data
     image_df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
-    image_df = image_df[image_df['set'] == 'validation']
+
+    # Add a set selector
+    set_selector = st.selectbox(
+        "Select a set",
+        options=["review", "prediction","train"],
+        index=0
+    )
+    
     if image_df is None:
         st.warning("No images found in experiments")
         return

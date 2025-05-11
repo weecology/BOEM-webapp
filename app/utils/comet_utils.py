@@ -117,7 +117,7 @@ def create_shapefiles(annotations, metadata):
     gdf.crs = "EPSG:4326"
     gdf.to_file("app/data/all_predictions.shp", driver='ESRI Shapefile')
 
-def download_validation_images(experiment, save_dir='app/data/images'):
+def download_images(experiment, save_dir='app/data/images'):
     """Download all images logged to a Comet experiment"""
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -137,12 +137,8 @@ def download_validation_images(experiment, save_dir='app/data/images'):
         if asset["metadata"] is None:
             continue
 
-        # Get image name and data
-        if not "validation" in asset["metadata"]:
-            continue
-
         image_name = asset['fileName']
-        image_path = save_dir / image_name
+        image_path = save_dir / (image_name if image_name.endswith('.png') else f"{image_name}.png")
 
         # Only download if doesn't exist
         if not image_path.exists():
