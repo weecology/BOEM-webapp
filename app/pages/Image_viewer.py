@@ -18,20 +18,12 @@ def app():
         step=0.01
     )
 
-    # Add a set selector
-    st.text(
-        "Select a set to filter by:\n"
-        "'all' shows all images\n"
-        "'review' shows images with a detection confidence below the review threshold\n"
-        "'prediction' shows images that have not been human-reviewed\n"
-        "'train' shows images that have been human-reviewed and are ready to be used for training"
+    # Add human-reviewed filter
+    human_reviewed = st.checkbox(
+        "Human-reviewed",
+        value=False,
+        help="Show only images that have been reviewed by a human"
     )
-    set_selector = st.selectbox(
-        "Select a set (optional)",
-        options=["all", "review", "prediction","train"],
-        index=0
-    )
-    
 
     if image_df is None:
         st.warning("No images found in experiments")
@@ -51,8 +43,8 @@ def app():
     
     # Filter images by selected species and detection score and set
     species_images = image_df[(image_df['cropmodel_label'] == selected_species) & (image_df['score'] >= detection_threshold)]
-    if set_selector != "all":
-        species_images = species_images[species_images['set'] == set_selector]
+    if human_reviewed:
+        species_images = species_images[species_images['set'].isin(['train', 'validation', "review"])]
     
     # Create image grid with 3 columns
     cols = st.columns(3)

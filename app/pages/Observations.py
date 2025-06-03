@@ -69,6 +69,12 @@ def app():
                 default=unique_labels,
                 help="Select species to display"
             )
+
+            human_reviewed = st.checkbox(
+                "Show only human-reviewed images",
+                value=True,
+                help="If checked, only images in the 'train', 'validation', or 'review' sets will be shown."
+            )
     
     with col1:
         # Create map
@@ -81,6 +87,9 @@ def app():
                     (gdf['score'] >= score_threshold) & 
                     (gdf['cropmodel_'].isin(selected_labels))
                 ]
+
+                if human_reviewed:
+                    filtered_gdf = filtered_gdf[filtered_gdf['set'].isin(['train', 'validation', "review"])]
                 
                 if len(filtered_gdf) == 0:
                     st.warning("No observations meet the selected filters")
