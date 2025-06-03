@@ -35,8 +35,7 @@ def parse_aflight_file(file_path):
             lon = capture.findtext('BRLon')
             if camera_guid and filename and lat and lon:
                 records.append({
-                    'unique_image': camera_guid,
-                    'image_path': filename,
+                    'unique_image': os.path.splitext(filename)[0],
                     'lat': float(lat),
                     'long': float(lon),
                     'flight_name': flight_name,

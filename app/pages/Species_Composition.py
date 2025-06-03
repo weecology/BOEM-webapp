@@ -86,11 +86,24 @@ def app():
     # Read the data
     predictions_df = pd.read_csv("app/data/predictions.csv")
     
+    # Detection score slider
+    detection_threshold = st.slider(
+        "Detection Confidence Threshold",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.6,
+        step=0.01
+    )
+    
     # Add flight name dropdown
     flight_name = st.selectbox("Select Flight Name", predictions_df["flight_name"].unique())
     
     # Filter data for selected flight
     filtered_df = predictions_df[predictions_df["flight_name"] == flight_name]
+    
+    # Filter by detection score if column exists
+    if 'score' in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df['score'] >= detection_threshold]
     
     # Create and display predictions plot
     predictions_plot_percent, predictions_plot_raw, percentages_df = create_prediction_plots(filtered_df)

@@ -54,12 +54,12 @@ def app():
             
             # Add score threshold slider
             score_threshold = st.slider(
-                "Confidence Score",  # Shortened label
+                "Detection Confidence",  # Shortened label
                 min_value=0.0,
                 max_value=1.0,
-                value=0.25,
+                value=0.6,
                 step=0.05,
-                help="Filter observations by confidence score"
+                help="Filter observations by detection confidence"
             )
             
             # Add label filter
