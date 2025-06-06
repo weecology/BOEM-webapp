@@ -36,8 +36,9 @@ def create_comet_links(experiment_id):
     return html_links
 
 def app():
-    st.text("Machine models in collaboration with the University of Florida. There are two models: a classification model and a detection model. The detection model identifies objects of interest, and the classification model classifies them the finest level of detail possible. The model for each flight starts from a backbone model trained on the entire dataset and additional data from the ecological monitoring community")
-    st.title("Backbone Models")
+    st.header("Model Development")
+    st.text("Machine learning models are developed in collaboration with the University of Florida. The detection model identifies objects of interest, and the classification model classifies them the finest level of detail possible. The model for each flight starts from a backbone model trained on the entire dataset and additional data from the ecological monitoring community. It is then customized for each flight.")
+    st.header("Backbone Models")
 
     st.header("Detection Model")
     # --- Detection Model Metrics Section ---
@@ -65,7 +66,7 @@ def app():
 
     st.header("Classification Model")
 
-    st.title("Flight Model Metrics")
+    st.header("Flight Model Metrics")
     metrics_df = pd.read_csv("app/data/metrics.csv")
 
     #Flight name dropdown

@@ -9,10 +9,11 @@ import pandas as pd
 from pages.Species_Composition import app as species_composition_app
 from pages.Model_Development import app as model_development_app
 from pages.Analysis import app as analysis_app
-from pages.Observations import app as observations_app
 from pages.Image_viewer import app as image_viewer_app
 from pages.Bulk_Labeling import app as bulk_labeling_app
 import geopandas as gpd
+import os
+import sqlite3
 
 st.set_page_config(
     page_title="Bureau of Ocean Energy Management - Gulf of Mexico Biodiversity Survey",
@@ -20,38 +21,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Original home page content
-def create_label_count_plots(label_counts_df):
-    """Create plots showing label distributions over time"""
-    if label_counts_df is None:
-        return None, None
-
-    # Create histogram of most recent model's counts
-    counts_df = label_counts_df.groupby(['set', 'cropmodel_label'
-                                            ]).size().reset_index(name='count')
-    counts_df.columns = ['set', 'label', 'count']
-
-    # remove FalsePositive and '0' from the label column
-    counts_df = counts_df[counts_df['label'] != 'FalsePositive']
-    counts_df = counts_df[counts_df['label'] != '0']
-
-    # Sort labels by total count across all sets
-    label_order = counts_df.groupby('label')['count'].sum().sort_values(ascending=False).index
-
-    fig_hist = px.bar(counts_df,
-                      x='label',
-                      y='count',
-                      color='set',
-                      title='Label Distribution in Latest Prediction',
-                      labels={
-                          'label': 'Label Type',
-                          'count': 'Number of Instances',
-                          'set': 'Dataset'
-                      },
-                      category_orders={"label": label_order},
-                      barmode='group')
-
-    return fig_hist
 # Read the data
 data_path = Path(__file__).parent / "data" / "most_recent_all_flight_predictions.csv"
 
@@ -68,13 +37,21 @@ df = pd.read_csv(data_path)
 # Only keep two word labels
 df = df[df["cropmodel_label"].str.count(" ") == 1]
 
-df["timestamp"] = pd.to_datetime(df["timestamp"])
+# The flight name has the time stamp, so we need to remove it
+# Split flight name into parts and get the date component
+date_component = df["flight_name"].str.split("_").str[1]
+
+# Convert to datetime 
+datetime_values = pd.to_datetime(date_component)
+
+# Format as YYYY-MM-DD string
+df["timestamp"] = datetime_values.astype(str)
 
 gdf = gpd.read_file(data_path.parent / "all_predictions.shp")
 gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
 
 st.title("Bureau of Ocean Energy Management - Gulf of Mexico Biodiversity Survey")
-st.text("This application provides tools for visualizing and analyzing biodiversity data collected during aerial surveys of offshore energy development areas. The tool uses AI to detect and classify marine wildlife species in aerial images. These data are used to inform the development of offshore projects using rapid and cost-effective surveys.")
+st.text("This application provides tools for visualizing and analyzing biodiversity data collected during aerial surveys of offshore energy development areas. The tool uses AI to detect and classify marine wildlife species in aerial images. These data are used to inform the development of offshore projects using rapid and cost-effective airborne surveys.")
 col1, col2 = st.columns(2)
 
 with col1:
@@ -98,75 +75,115 @@ with col2:
     st.header("Statistics")
     st.write(f"Current Flight: {df['flight_name'].unique()[-1]}")
     st.write(f"Total Observations: {len(df)}")
-    st.write(f"Number of Species: {df['cropmodel_label'].nunique()}")
-    st.write(f"Total Flights: {df['flight_name'].nunique()}")
-    st.write(f"Annotation Date Range: {df['timestamp'].min().strftime('%Y-%m-%d')} to {df['timestamp'].max().strftime('%Y-%m-%d')}")
+    st.write(f"Human-reviewed observations: {df[df['set'].isin(['train', 'validation', 'review'])].shape[0]}")
+    st.write(f"Species: {df['cropmodel_label'].nunique()}")
+    st.write(f"Aerial Surveys: {df['flight_name'].nunique()}")
     st.write(f"Flight Date Range: {gdf['date'].min().strftime('%Y-%m-%d')} to {gdf['date'].max().strftime('%Y-%m-%d')}")
-    
-# Create and display label distribution plots
-st.subheader("Predicted Species")
-hist_plot = create_label_count_plots(df)
-st.plotly_chart(hist_plot, use_container_width=True)
 
-# Place the data below the plot
-st.write(df.groupby('cropmodel_label').size().sort_values(ascending=False).reset_index(name='count'))
-
-# Rare species plot
-species_counts = df["cropmodel_label"].value_counts()
-if not species_counts.empty:
-    max_count = species_counts.iloc[0]
-    rare_threshold = max_count * 0.10
-    rare_species = species_counts[species_counts < rare_threshold]
-    if not rare_species.empty:
-        rare_df = df[df['cropmodel_label'].isin(rare_species.index)]
-        rare_counts = rare_df['cropmodel_label'].value_counts().reset_index()
-        rare_counts.columns = ['label', 'count']
-        rare_fig = px.bar(
-            rare_counts,
-            x='label',
-            y='count',
-            title='Predicted Rare Species (<10% of Most Common - Human Reviewed)',
-            labels={'label': 'Species', 'count': 'Number of Instances'}
-        )
-        st.plotly_chart(rare_fig, use_container_width=True)
+# --- Begin Observations content ---
+def load_vector(file_path):
+    if file_path.endswith('.mbtiles'):
+        conn = sqlite3.connect(file_path)
+        metadata = dict(conn.execute('SELECT * FROM metadata').fetchall())
+        center = metadata.get('center', '0,0,2').split(',')
+        lon, lat = float(center[0]), float(center[1])
+        zoom = int(center[2]) if len(center) > 2 else 2
+        attribution = metadata.get('attribution', 'Generated by Tippecanoe')
+        return None, lon, lat, zoom, metadata.get('name', 'MBTiles Layer'), attribution
     else:
-        st.info('No rare species (less than 10% of the most common) found in this dataset.')
-else:
-    st.info('No species data available.')
+        return gpd.read_file(file_path), None, None, None, None, None
 
-st.subheader("Reviewed Observations")
-
-# Reviewed species plot
-reviewed_species_counts = df[df['set'].isin(['train', 'validation', "review"])]['cropmodel_label'].value_counts()
-if not reviewed_species_counts.empty:
-    reviewed_counts = reviewed_species_counts.reset_index()
-    reviewed_counts.columns = ['label', 'count']
-    reviewed_fig = px.bar(
-        reviewed_counts,
-        x='label',
-        y='count',
-        title='Reviewed Species Distribution',
-        labels={'label': 'Species', 'count': 'Number of Instances'}
-    )
-    st.plotly_chart(reviewed_fig, use_container_width=True)
-
-    # Rare species plot (as before)
-    max_count = reviewed_species_counts.iloc[0]
-    rare_threshold = max_count * 0.10
-    rare_species = reviewed_species_counts[reviewed_species_counts < rare_threshold]
-    if not rare_species.empty:
-        rare_df = df[df['cropmodel_label'].isin(rare_species.index)]
-        rare_counts = rare_df['cropmodel_label'].value_counts().reset_index()
-        rare_counts.columns = ['label', 'count']
-        rare_fig = px.bar(
-            rare_counts,
-            x='label',
-            y='count',
-            title='Predicted Rare Species (<10% of Most Common - Human Reviewed)',
-            labels={'label': 'Species', 'count': 'Number of Instances'}
+st.header("Observations")
+m = leafmap.Map(center=[40, -70], zoom=6)
+app_data_dir = Path(__file__).parent / "data"
+col1, col2 = st.columns([4, 1])
+with col2:
+    default_file = app_data_dir / "all_predictions.shp"
+    if default_file.exists():
+        gdf_obs = gpd.read_file(default_file)
+        gdf_obs = gdf_obs[gdf_obs['cropmodel_'].notna()]
+        unique_labels = sorted(gdf_obs['cropmodel_'].unique())
+        score_threshold = st.slider(
+            "Detection Confidence",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.6,
+            step=0.05,
+            help="Filter observations by detection confidence"
         )
-        st.plotly_chart(rare_fig, use_container_width=True)
+        selected_labels = st.multiselect(
+            "Species",
+            options=unique_labels,
+            default=unique_labels,
+            help="Select species to display"
+        )
+        human_reviewed = st.checkbox(
+            "Only Human-reviewed images",
+            value=True,
+            help="If checked, only images in the 'train', 'validation', or 'review' sets will be shown."
+        )
+with col1:
+    m.add_basemap("OpenStreetMap")
+    if default_file.exists():
+        try:
+            filtered_gdf = gdf_obs[
+                (gdf_obs['score'] >= score_threshold) &
+                (gdf_obs['cropmodel_'].isin(selected_labels))
+            ]
+            if human_reviewed:
+                filtered_gdf = filtered_gdf[filtered_gdf['set'].isin(['train', 'validation', 'review'])]
+            if len(filtered_gdf) == 0:
+                st.warning("No observations meet the selected filters")
+            else:
+                api_key = os.getenv('COMET_API_KEY')
+                filtered_gdf['image_link'] = filtered_gdf['crop_api_p'].apply(
+                    lambda x: f'<a href="{x}&apiKey={api_key}" target="_blank">View Image</a>'
+                )
+                filtered_gdf = filtered_gdf[['score', 'cropmodel_', 'cropmode_1', 'set',
+                                'flight_n_1', 'date', 'lat', 'long', 'image_link', 'geometry']].rename(columns={
+                    'score': 'Detection Score',
+                    'cropmodel_': 'Species',
+                    'cropmode_1': 'Species Confidence',
+                    'set': 'Set',
+                    'flight_n_1': 'Flight Name',
+                    'date': 'Date',
+                    'lat': 'Latitude',
+                    'long': 'Longitude',
+                    'image_link': 'View Image'
+                })
+                m.add_gdf(
+                    filtered_gdf,
+                    layer_name=f"Observations (score ≥ {score_threshold})",
+                    style={'color': "#0000FF"},
+                    info_mode='on_click',
+                    hover_style={'sticky': True}
+                )
+        except Exception as e:
+            st.error(f"Error processing vector data: {str(e)}")
     else:
-        st.info('No rare species (less than 10% of the most common) found in this dataset.')
-else:
-    st.info('No species data available.')
+        st.error(f"Data file not found: {default_file}")
+    m.to_streamlit(height=700, width=None)
+with col2:
+    if default_file.exists():
+        try:
+            temp_file = app_data_dir / "temp_filtered.shp"
+            filtered_gdf.to_file(temp_file)
+            with open(temp_file, 'rb') as file:
+                shapefile_bytes = file.read()
+                st.download_button(
+                    label="Download Data",
+                    data=shapefile_bytes,
+                    file_name=f"predictions_filtered.shp",
+                    mime="application/octet-stream",
+                    help=f"Download filtered observations (score ≥ {score_threshold})"
+                )
+            temp_file.unlink()
+        except Exception as e:
+            st.error(f"Error preparing download: {str(e)}")
+st.info("""
+**How to use:**
+- Click on any point on the map to view its metadata
+- Use the confidence score slider to filter observations
+- Select species to show/hide from the map
+""")
+# --- End Observations content ---

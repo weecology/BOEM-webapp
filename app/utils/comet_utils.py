@@ -151,8 +151,10 @@ def get_comet_experiments():
         latest_predictions['cropmodel_label'] != 'FalsePositive']
     latest_predictions = latest_predictions[
         latest_predictions['cropmodel_label'] != '0']
+    
     latest_predictions.to_csv(
         "app/data/most_recent_all_flight_predictions.csv", index=False)
+    
 
 def create_shapefiles(annotations, metadata):
     """Create shapefiles for each flight_name"""

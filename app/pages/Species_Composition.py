@@ -11,47 +11,8 @@ def create_prediction_plots(predictions_df):
     # Convert timestamp to datetime
     predictions_df['timestamp'] = pd.to_datetime(predictions_df['timestamp'])
     
-    # Calculate total counts per timestamp
-    total_counts = predictions_df.groupby('timestamp').size()
-    
-    # Calculate percentage for each label at each timestamp
-    label_percentages = predictions_df.groupby(['timestamp', 'cropmodel_label']).size().unstack(fill_value=0)
-    label_percentages = label_percentages.div(total_counts, axis=0) * 100
-    
-    # Melt the dataframes for plotting
-    plot_df_percent = label_percentages.reset_index().melt(
-        id_vars=['timestamp'],
-        var_name='Species',
-        value_name='Percentage'
-    )
-    
     # Create raw counts dataframe
     raw_counts = predictions_df.groupby(['timestamp', 'cropmodel_label']).size().reset_index(name='count')
-    
-    # Create percentage plot
-    fig_percent = px.line(
-        plot_df_percent,
-        x='timestamp',
-        y='Percentage',
-        color='Species',
-        title='Species Composition Over Time (Percentage)',
-        labels={
-            'timestamp': 'Date',
-            'Percentage': 'Percentage of Total Predictions',
-            'Species': 'Species'
-        }
-    )
-    
-    fig_percent.update_layout(
-        height=600,
-        xaxis_tickangle=-45,
-        legend=dict(
-            yanchor="top",
-            y=0.99,
-            xanchor="left",
-            x=1.02
-        )
-    )
     
     # Create raw counts plot
     fig_raw = px.line(
@@ -78,11 +39,11 @@ def create_prediction_plots(predictions_df):
         )
     )
     
-    return fig_percent, fig_raw, label_percentages
+    return fig_raw
 
 def app():
     st.title("Species Composition Analysis")
-    
+    st.text("The species composition analysis shows how the predictions of species change over time during model development and annotation. This addresses the question of whether additional iterations of model development will lead to changes in downstream data.")
     # Read the data
     predictions_df = pd.read_csv("app/data/predictions.csv")
     
@@ -105,18 +66,32 @@ def app():
     if 'score' in filtered_df.columns:
         filtered_df = filtered_df[filtered_df['score'] >= detection_threshold]
     
-    # Create and display predictions plot
-    predictions_plot_percent, predictions_plot_raw, percentages_df = create_prediction_plots(filtered_df)
+    # Create and display raw count plot
+    raw_plot = create_prediction_plots(filtered_df)
+    st.plotly_chart(raw_plot, use_container_width=True)
     
-    st.plotly_chart(predictions_plot_percent, use_container_width=True)
-    st.plotly_chart(predictions_plot_raw, use_container_width=True)
-    
-    # Display the percentage data
-    with st.expander("View Species Percentages Data"):
-        st.dataframe(
-            percentages_df.style.format("{:.2f}%"),
-            height=400
-        )
+    # Add rare species plot below
+    species_counts = filtered_df['cropmodel_label'].value_counts()
+    if not species_counts.empty:
+        max_count = species_counts.iloc[0]
+        rare_threshold = max_count * 0.10
+        rare_species = species_counts[species_counts < rare_threshold]
+        if not rare_species.empty:
+            rare_df = filtered_df[filtered_df['cropmodel_label'].isin(rare_species.index)]
+            rare_counts = rare_df['cropmodel_label'].value_counts().reset_index()
+            rare_counts.columns = ['label', 'count']
+            rare_fig = px.bar(
+                rare_counts,
+                x='label',
+                y='count',
+                title='Rare Species (<10% of Most Common)',
+                labels={'label': 'Species', 'count': 'Number of Instances'}
+            )
+            st.plotly_chart(rare_fig, use_container_width=True)
+        else:
+            st.info('No rare species (less than 10% of the most common) found in this dataset.')
+    else:
+        st.info('No species data available.')
 
 if __name__ == "__main__":
     load_css()

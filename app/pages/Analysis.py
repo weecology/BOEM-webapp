@@ -1,122 +1,105 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from pathlib import Path
-import seaborn as sns
-import matplotlib.pyplot as plt
 from utils.styling import load_css
+import geopandas as gpd
+
+def create_label_count_plots(label_counts_df):
+    """Create plots showing label distributions over time"""
+    if label_counts_df is None:
+        return None, None
+    counts_df = label_counts_df.groupby(['set', 'cropmodel_label']).size().reset_index(name='count')
+    counts_df.columns = ['set', 'label', 'count']
+    counts_df = counts_df[counts_df['label'] != 'FalsePositive']
+    counts_df = counts_df[counts_df['label'] != '0']
+    label_order = counts_df.groupby('label')['count'].sum().sort_values(ascending=False).index
+    fig_hist = px.bar(counts_df,
+                      x='label',
+                      y='count',
+                      color='set',
+                      title='Label Distribution in Latest Prediction',
+                      labels={
+                          'label': 'Label Type',
+                          'count': 'Number of Instances',
+                          'set': 'Dataset'
+                      },
+                      category_orders={"label": label_order},
+                      barmode='group')
+    return fig_hist
 
 def app():
     st.title("Species Analysis")
-    # Get the app's data directory
     app_data_dir = Path(__file__).parents[1] / "data"
-    
-    # Always use the default data file
     default_file = app_data_dir / "most_recent_all_flight_predictions.csv"
     df = pd.read_csv(default_file)
+    df = df[df["cropmodel_label"].str.count(" ") == 1]
+    date_component = df["flight_name"].str.split("_").str[1]
+    datetime_values = pd.to_datetime(date_component)
+    df["timestamp"] = datetime_values.astype(str)
+    gdf = gpd.read_file(default_file.parent / "all_predictions.shp")
+    gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
 
-    df["date"] = pd.to_datetime(df["timestamp"])
-    df["count"] = 1
-    
-    # Add tabs for different visualizations
-    tab1, tab2 = st.tabs([
-        "Flight Analysis",
-        "Temporal Analysis"
-    ])
-    
-    df["month"] = df["date"].dt.month
-    df["year"] = df["date"].dt.year
-    df["monthyear"] = df["date"].dt.strftime('%Y-%m')
-    label_counts_df = df.groupby(['monthyear']).size().reset_index(name='count')
+    st.subheader("Predicted Species")
+    hist_plot = create_label_count_plots(df)
+    st.plotly_chart(hist_plot, use_container_width=True)
+    st.write(df.groupby('cropmodel_label').size().sort_values(ascending=False).reset_index(name='count'))
 
-    # Create time series plot of label counts
-    fig_timeseries = px.line(
-        label_counts_df,
-        x='monthyear',
-        y='count',
-        title='Label Counts Over Time',
-        labels={'count': 'Number of Instances', 'monthyear': 'Month-Year'}
-    )
-    
-    st.plotly_chart(fig_timeseries)
+    # Rare species plot
+    species_counts = df["cropmodel_label"].value_counts()
+    if not species_counts.empty:
+        max_count = species_counts.iloc[0]
+        rare_threshold = max_count * 0.10
+        rare_species = species_counts[species_counts < rare_threshold]
+        if not rare_species.empty:
+            rare_df = df[df['cropmodel_label'].isin(rare_species.index)]
+            rare_counts = rare_df['cropmodel_label'].value_counts().reset_index()
+            rare_counts.columns = ['label', 'count']
+            rare_fig = px.bar(
+                rare_counts,
+                x='label',
+                y='count',
+                title='Predicted Rare Species (<10% of Most Common - Human Reviewed)',
+                labels={'label': 'Species', 'count': 'Number of Instances'}
+            )
+            st.plotly_chart(rare_fig, use_container_width=True)
+        else:
+            st.info('No rare species (less than 10% of the most common) found in this dataset.')
+    else:
+        st.info('No species data available.')
 
-    with st.expander("View Raw Label Counts Data"):
-        st.dataframe(label_counts_df)
-
-    with tab1:
-        st.subheader("Flight Analysis")
-        
-        # Site distribution
-        site_counts = df.groupby('flight_name').size().sort_values(ascending=False)
-        
-        fig_sites = px.bar(
-            x=site_counts.index,
-            y=site_counts.values,
-            title="Biodiversity Counts by Flight",
-            labels={'x': 'Flight', 'y': 'Total Count'}
-        )
-        fig_sites.update_layout(
-            xaxis_tickangle=-45,
-            height=500,
-            width=800
-        )
-        st.plotly_chart(fig_sites)
-        
-        # Species distribution by flight
-        df["count"] = 1
-        flight_species = df.pivot_table(
-            index='flight_name',
-            columns='cropmodel_label',
-            values='count',
-            aggfunc='sum',
-            fill_value=0
-        )
-        
-        fig, ax = plt.subplots(figsize=(12, 8))
-        sns.heatmap(flight_species, cmap='YlOrRd', ax=ax)
-        plt.title("Species Distribution by Flight")
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
-    
-    with tab2:
-        st.subheader("Temporal Analysis")
-        
-        # Add month and year columns
-        df['Month'] = df['date'].dt.month
-        df['Year'] = df['date'].dt.year
-        df['MonthYear'] = df['date'].dt.strftime('%Y-%m')
-        
-        # Monthly trends
-        monthly_counts = df.groupby('MonthYear').size().reset_index(name='count')
-        fig_monthly = px.line(
-            monthly_counts,
-            x='MonthYear',
+    st.subheader("Reviewed Observations")
+    reviewed_species_counts = df[df['set'].isin(['train', 'validation', "review"] )]['cropmodel_label'].value_counts()
+    if not reviewed_species_counts.empty:
+        reviewed_counts = reviewed_species_counts.reset_index()
+        reviewed_counts.columns = ['label', 'count']
+        reviewed_fig = px.bar(
+            reviewed_counts,
+            x='label',
             y='count',
-            title="Monthly Bird Counts",
-            labels={'count': 'Total Count', 'MonthYear': 'Month-Year'}
+            title='Reviewed Species Distribution',
+            labels={'label': 'Species', 'count': 'Number of Instances'}
         )
-        fig_monthly.update_layout(
-            height=500,
-            width=800,
-            xaxis_tickangle=-45
-        )
-        st.plotly_chart(fig_monthly)
-        
-        # Species by month heatmap
-        monthly_species = df.pivot_table(
-            index='MonthYear',
-            columns='cropmodel_label',
-            values='count',
-            aggfunc='sum',
-            fill_value=0
-        )
-        
-        fig, ax = plt.subplots(figsize=(12, 8))
-        sns.heatmap(monthly_species, cmap='YlOrRd', ax=ax)
-        plt.title("Species Distribution by Month")
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
+        st.plotly_chart(reviewed_fig, use_container_width=True)
+        max_count = reviewed_species_counts.iloc[0]
+        rare_threshold = max_count * 0.10
+        rare_species = reviewed_species_counts[reviewed_species_counts < rare_threshold]
+        if not rare_species.empty:
+            rare_df = df[df['cropmodel_label'].isin(rare_species.index)]
+            rare_counts = rare_df['cropmodel_label'].value_counts().reset_index()
+            rare_counts.columns = ['label', 'count']
+            rare_fig = px.bar(
+                rare_counts,
+                x='label',
+                y='count',
+                title='Predicted Rare Species (<10% of Most Common - Human Reviewed)',
+                labels={'label': 'Species', 'count': 'Number of Instances'}
+            )
+            st.plotly_chart(rare_fig, use_container_width=True)
+        else:
+            st.info('No rare species (less than 10% of the most common) found in this dataset.')
+    else:
+        st.info('No species data available.')
 
 if __name__ == "__main__":
     load_css()
