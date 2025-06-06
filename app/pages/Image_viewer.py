@@ -9,6 +9,9 @@ def app():
     # Get experiment data
     image_df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
 
+    # Convert cropmodel_label to string type
+    image_df['cropmodel_label'] = image_df['cropmodel_label'].astype(str)
+
     # Detection score slider
     detection_threshold = st.slider(
         "Detection Confidence Threshold",

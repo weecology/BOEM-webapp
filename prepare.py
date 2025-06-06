@@ -10,7 +10,7 @@ import os
 if __name__ == '__main__':
     # Download newest report    
     get_comet_experiments()
-
+    
     # Create shapefiles
     latest_predictions = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
 
@@ -30,22 +30,25 @@ if __name__ == '__main__':
     image_dir = Path("app/data/images")
     image_dir.mkdir(parents=True, exist_ok=True)
 
-    # Download images from API paths
-    for _, row in latest_predictions.iterrows():
-        if pd.isna(row['crop_api_path']):
-            continue
-            
-        image_path = image_dir / f"{row['crop_image_id']}"
+    # Download images from API paths - limit to 100 per label
+    for label in latest_predictions['cropmodel_label'].unique():
+        # Get rows for this label and take first 100
+        label_predictions = latest_predictions[latest_predictions['cropmodel_label'] == label].head(100)
         
-        # Skip if image already exists
-        if image_path.exists():
-            continue
+        for _, row in label_predictions.iterrows():
+            if pd.isna(row['crop_api_path']):
+                continue
+                
+            image_path = image_dir / f"{row['crop_image_id']}"
             
-        try:
-            response = requests.get(row['crop_api_path'])
-            response.raise_for_status()
-            with open(image_path, 'wb') as f:
-                f.write(response.content)
-        except Exception as e:
-            print(f"Error downloading {row['crop_api_path']}: {e}")
-
+            # Skip if image already exists
+            if image_path.exists():
+                continue
+                
+            try:
+                response = requests.get(row['crop_api_path'])
+                response.raise_for_status()
+                with open(image_path, 'wb') as f:
+                    f.write(response.content)
+            except Exception as e:
+                print(f"Error downloading {row['crop_api_path']}: {e}")

@@ -13,6 +13,56 @@ import json
 load_dotenv()
 
 
+def detection_model_metrics():
+    """Get the metrics for the detection model"""
+    api = API(api_key=os.getenv('COMET_API_KEY'))
+    workspace = os.getenv('COMET_WORKSPACE')
+    
+    # Get all experiments from the BOEM project
+    experiments = api.get(f"{workspace}/boem")
+    
+    # Filter experiments by duration
+    metrics_data = []
+    all_predictions = []
+    for exp in experiments:
+        # Only 'pipeline' tags
+        tags = exp.get_tags()
+        if 'detection' not in tags:
+            continue
+
+        if exp.archived:
+            print(f"Skipping archived experiment {exp.name}")
+            continue
+
+        if exp.get_state() == 'running':
+            print(f"Skipping running experiment {exp.name}")
+            continue
+
+        duration = exp.get_metadata()['durationMillis']
+
+        metrics = exp.get_metrics()
+        metrics_df = pd.DataFrame(metrics)
+
+        metrics_df = metrics_df[metrics_df["metricName"].isin(
+            ["box_recall", "box_precision","empty_frame_accuracy"])]
+
+        if not metrics_df.empty:
+            # Latest value for each metric
+            metrics_df = metrics_df.sort_values(
+                by='timestamp', ascending=False).groupby(
+                    'metricName').first().reset_index()
+
+            metrics_df['timestamp'] = pd.to_datetime(
+                metrics_df['timestamp'], unit='ms')
+            metrics_df['experiment'] = exp.name
+            metrics_df["flight_name"] = exp.get_parameters_summary(
+                "flight_name")["valueCurrent"]
+            metrics_data.append(metrics_df)
+
+    # Write to csv
+    pd.concat(metrics_data).to_csv("app/data/detection_model_metrics.csv", index=False)
+
+    # Write to csv
 def get_comet_experiments():
     """Get all experiments from the BOEM project with duration > 10min"""
     api = API(api_key=os.getenv('COMET_API_KEY'))
@@ -89,9 +139,12 @@ def get_comet_experiments():
     # Write to csv
     pd.concat(metrics_data).to_csv("app/data/metrics.csv", index=False)
 
-    # More recent prediction for each image, taken the most recent 
-    # Get most recent prediction for each image
-    latest_predictions = all_predictions.sort_values('timestamp').groupby('image_path').last().reset_index()
+    # Get the latest timestamp for each image_path
+    latest_timestamp = all_predictions.groupby('image_path')['timestamp'].max()
+    
+    # Get all rows that match the latest timestamp for each image_path
+    latest_predictions = all_predictions[all_predictions.apply(lambda x: x['timestamp'] == latest_timestamp[x['image_path']], axis=1)]
+    latest_predictions = latest_predictions.reset_index(drop=True)
 
     # Drop FalsePositive and '0' from the label column
     latest_predictions = latest_predictions[

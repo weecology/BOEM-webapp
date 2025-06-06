@@ -12,6 +12,7 @@ from pages.Analysis import app as analysis_app
 from pages.Observations import app as observations_app
 from pages.Image_viewer import app as image_viewer_app
 from pages.Bulk_Labeling import app as bulk_labeling_app
+import geopandas as gpd
 
 st.set_page_config(
     page_title="Bureau of Ocean Energy Management - Gulf of Mexico Biodiversity Survey",
@@ -34,20 +35,23 @@ def create_label_count_plots(label_counts_df):
     counts_df = counts_df[counts_df['label'] != 'FalsePositive']
     counts_df = counts_df[counts_df['label'] != '0']
 
+    # Sort labels by total count across all sets
+    label_order = counts_df.groupby('label')['count'].sum().sort_values(ascending=False).index
+
     fig_hist = px.bar(counts_df,
-                        x='label',
-                        y='count',
-                        color='set',
-                        title=f'Label Distribution in Latest Prediction',
-                        labels={
-                            'label': 'Label Type',
-                            'count': 'Number of Instances',
-                            'set': 'Dataset'
-                        },
-                        barmode='group')
+                      x='label',
+                      y='count',
+                      color='set',
+                      title='Label Distribution in Latest Prediction',
+                      labels={
+                          'label': 'Label Type',
+                          'count': 'Number of Instances',
+                          'set': 'Dataset'
+                      },
+                      category_orders={"label": label_order},
+                      barmode='group')
 
     return fig_hist
-
 # Read the data
 data_path = Path(__file__).parent / "data" / "most_recent_all_flight_predictions.csv"
 
@@ -61,7 +65,13 @@ if str(app_dir) not in sys.path:
     sys.path.append(str(app_dir))
 
 df = pd.read_csv(data_path)
+# Only keep two word labels
+df = df[df["cropmodel_label"].str.count(" ") == 1]
+
 df["timestamp"] = pd.to_datetime(df["timestamp"])
+
+gdf = gpd.read_file(data_path.parent / "all_predictions.shp")
+gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
 
 st.title("Bureau of Ocean Energy Management - Gulf of Mexico Biodiversity Survey")
 st.text("This application provides tools for visualizing and analyzing biodiversity data collected during aerial surveys of offshore energy development areas. The tool uses AI to detect and classify marine wildlife species in aerial images. These data are used to inform the development of offshore projects using rapid and cost-effective surveys.")
@@ -90,15 +100,19 @@ with col2:
     st.write(f"Total Observations: {len(df)}")
     st.write(f"Number of Species: {df['cropmodel_label'].nunique()}")
     st.write(f"Total Flights: {df['flight_name'].nunique()}")
-    st.write(f"Date Range: {df['timestamp'].min().strftime('%Y-%m-%d')} to {df['timestamp'].max().strftime('%Y-%m-%d')}")
-
+    st.write(f"Annotation Date Range: {df['timestamp'].min().strftime('%Y-%m-%d')} to {df['timestamp'].max().strftime('%Y-%m-%d')}")
+    st.write(f"Flight Date Range: {gdf['date'].min().strftime('%Y-%m-%d')} to {gdf['date'].max().strftime('%Y-%m-%d')}")
+    
 # Create and display label distribution plots
 st.subheader("Predicted Species")
 hist_plot = create_label_count_plots(df)
 st.plotly_chart(hist_plot, use_container_width=True)
 
+# Place the data below the plot
+st.write(df.groupby('cropmodel_label').size().sort_values(ascending=False).reset_index(name='count'))
+
 # Rare species plot
-species_counts = df['cropmodel_label'].value_counts()
+species_counts = df["cropmodel_label"].value_counts()
 if not species_counts.empty:
     max_count = species_counts.iloc[0]
     rare_threshold = max_count * 0.10
@@ -111,7 +125,7 @@ if not species_counts.empty:
             rare_counts,
             x='label',
             y='count',
-            title='Predicted Rare Species (<10% of Most Common)',
+            title='Predicted Rare Species (<10% of Most Common - Human Reviewed)',
             labels={'label': 'Species', 'count': 'Number of Instances'}
         )
         st.plotly_chart(rare_fig, use_container_width=True)
@@ -120,5 +134,39 @@ if not species_counts.empty:
 else:
     st.info('No species data available.')
 
-# Place the data below the plot
-st.write(df.groupby('cropmodel_label').size().sort_values(ascending=False).reset_index(name='count'))
+st.subheader("Reviewed Observations")
+
+# Reviewed species plot
+reviewed_species_counts = df[df['set'].isin(['train', 'validation', "review"])]['cropmodel_label'].value_counts()
+if not reviewed_species_counts.empty:
+    reviewed_counts = reviewed_species_counts.reset_index()
+    reviewed_counts.columns = ['label', 'count']
+    reviewed_fig = px.bar(
+        reviewed_counts,
+        x='label',
+        y='count',
+        title='Reviewed Species Distribution',
+        labels={'label': 'Species', 'count': 'Number of Instances'}
+    )
+    st.plotly_chart(reviewed_fig, use_container_width=True)
+
+    # Rare species plot (as before)
+    max_count = reviewed_species_counts.iloc[0]
+    rare_threshold = max_count * 0.10
+    rare_species = reviewed_species_counts[reviewed_species_counts < rare_threshold]
+    if not rare_species.empty:
+        rare_df = df[df['cropmodel_label'].isin(rare_species.index)]
+        rare_counts = rare_df['cropmodel_label'].value_counts().reset_index()
+        rare_counts.columns = ['label', 'count']
+        rare_fig = px.bar(
+            rare_counts,
+            x='label',
+            y='count',
+            title='Predicted Rare Species (<10% of Most Common - Human Reviewed)',
+            labels={'label': 'Species', 'count': 'Number of Instances'}
+        )
+        st.plotly_chart(rare_fig, use_container_width=True)
+    else:
+        st.info('No rare species (less than 10% of the most common) found in this dataset.')
+else:
+    st.info('No species data available.')

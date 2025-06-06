@@ -2,9 +2,6 @@ import streamlit as st
 from utils.styling import load_css
 import pandas as pd
 import plotly.express as px
-import seaborn as sns
-import matplotlib.pyplot as plt
-from pathlib import Path
 
 def create_metric_plots(metrics_df):
     """Create plots showing metric improvement over time"""
@@ -39,7 +36,36 @@ def create_comet_links(experiment_id):
     return html_links
 
 def app():
-    st.title("Model Development Metrics")
+    st.text("Machine models in collaboration with the University of Florida. There are two models: a classification model and a detection model. The detection model identifies objects of interest, and the classification model classifies them the finest level of detail possible. The model for each flight starts from a backbone model trained on the entire dataset and additional data from the ecological monitoring community")
+    st.title("Backbone Models")
+
+    st.header("Detection Model")
+    # --- Detection Model Metrics Section ---
+    try:
+        detection_metrics_df = pd.read_csv("app/data/detection_metrics.csv")
+        st.subheader("Detection Model Metrics Over Time")
+        # Plot detection metrics
+        if not detection_metrics_df.empty:
+            fig_detection = px.line(
+                detection_metrics_df,
+                x='timestamp',
+                y='metricValue',
+                color='metricName',
+                title='Detection Model Metrics Over Time',
+                labels={'timestamp': 'Timestamp', 'metricValue': 'Metric Value', 'metricName': 'Metric'}
+            )
+            st.plotly_chart(fig_detection, use_container_width=True)
+            # Show table
+            with st.expander("View Detection Model Metrics Data"):
+                st.dataframe(detection_metrics_df)
+        else:
+            st.info("No detection model metrics available.")
+    except Exception as e:
+        st.warning(f"Could not load detection model metrics: {e}")
+
+    st.header("Classification Model")
+
+    st.title("Flight Model Metrics")
     metrics_df = pd.read_csv("app/data/metrics.csv")
 
     #Flight name dropdown
@@ -62,10 +88,8 @@ def app():
 
     # Create experiment links table at the bottom
     st.subheader("Comet.ml Dashboard Links")
-    
     # Get unique experiments
     experiments = metrics_df[['experiment', 'flight_name']].drop_duplicates()
-    
     # Create links for each experiment
     links_data = []
     for _, row in experiments.iterrows():
@@ -75,10 +99,8 @@ def app():
             'Experiment ID': row['experiment'],
             **links
         })
-    
     # Create DataFrame with links
     links_df = pd.DataFrame(links_data)
-    
     # Display as HTML table
     st.write(
         links_df.to_html(
