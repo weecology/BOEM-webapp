@@ -2,159 +2,134 @@ import os
 from comet_ml import API
 from dotenv import load_dotenv
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
 import io
 from pathlib import Path
 import geopandas as gpd
-import json
 
 # Load environment variables
 load_dotenv()
 
-
-def detection_model_metrics():
-    """Get the metrics for the detection model"""
+def get_comet_metrics(metric_type='pipeline', output_file=None, metrics_to_track=None, include_predictions=False):
+    """
+    Get metrics from Comet.ml experiments
+    
+    Args:
+        metric_type (str): Type of metrics to fetch ('pipeline', 'detection', or 'classification')
+        output_file (str): Path to save the metrics CSV file
+        metrics_to_track (list): List of metric names to track
+        include_predictions (bool): Whether to include and process predictions
+    
+    Returns:
+        tuple: (metrics_df, predictions_df) if include_predictions is True, else metrics_df
+    """
     api = API(api_key=os.getenv('COMET_API_KEY'))
     workspace = os.getenv('COMET_WORKSPACE')
     
     # Get all experiments from the BOEM project
     experiments = api.get(f"{workspace}/boem")
     
-    # Filter experiments by duration
     metrics_data = []
     all_predictions = []
+    
     for exp in experiments:
-        # Only 'pipeline' tags
+        # Filter by tags
         tags = exp.get_tags()
-        if 'detection' not in tags:
+        if metric_type not in tags:
             continue
-
-        if exp.archived:
-            print(f"Skipping archived experiment {exp.name}")
+            
+        # Skip archived or running experiments
+        if exp.archived or exp.get_state() == 'running':
             continue
-
-        if exp.get_state() == 'running':
-            print(f"Skipping running experiment {exp.name}")
+            
+        # Skip incomplete pipeline experiments
+        if metric_type == 'pipeline' and 'complete' not in tags:
             continue
-
-        duration = exp.get_metadata()['durationMillis']
-
-        metrics = exp.get_metrics()
-        metrics_df = pd.DataFrame(metrics)
-
-        metrics_df = metrics_df[metrics_df["metricName"].isin(
-            ["box_recall", "box_precision","empty_frame_accuracy"])]
-
-        if not metrics_df.empty:
-            # Latest value for each metric
-            metrics_df = metrics_df.sort_values(
-                by='timestamp', ascending=False).groupby(
-                    'metricName').first().reset_index()
-
-            metrics_df['timestamp'] = pd.to_datetime(
-                metrics_df['timestamp'], unit='ms')
-            metrics_df['experiment'] = exp.name
-            metrics_df["flight_name"] = exp.get_parameters_summary(
-                "flight_name")["valueCurrent"]
-            metrics_data.append(metrics_df)
-
-    # Write to csv
-    pd.concat(metrics_data).to_csv("app/data/detection_model_metrics.csv", index=False)
-
-    # Write to csv
-def get_comet_experiments():
-    """Get all experiments from the BOEM project with duration > 10min"""
-    api = API(api_key=os.getenv('COMET_API_KEY'))
-    workspace = os.getenv('COMET_WORKSPACE')
-
-    # Get all experiments from the BOEM project
-    experiments = api.get(f"{workspace}/boem")
-
-    # Filter experiments by duration
-    metrics_data = []
-    all_predictions = []
-    for exp in experiments:
-        # Only 'pipeline' tags
-        tags = exp.get_tags()
-        if 'pipeline' not in tags:
-            continue
-
-        if 'complete' not in tags:
-            continue
-
-        if exp.archived:
-            print(f"Skipping archived experiment {exp.name}")
-            continue
-
-        if exp.get_state() == 'running':
-            print(f"Skipping running experiment {exp.name}")
-            continue
-
-        duration = exp.get_metadata()['durationMillis']
-        if duration > 600000:  # 10 minutes in milliseconds
-
-            print(f"Processing experiment {exp.name}")
-
-            flight_name = exp.get_parameters_summary(
-                "flight_name")["valueCurrent"]
-
-            # There was one preliminary flight to be removed
+            
+        # Skip preliminary flight
+        if metric_type == 'pipeline':
+            flight_name = exp.get_parameters_summary("flight_name")["valueCurrent"]
             if flight_name == "JPG_2024_Jan27":
                 continue
 
-            # Get metrics
-            metrics = exp.get_metrics()
-            metrics_df = pd.DataFrame(metrics)
+        # Get metrics
+        metrics = exp.get_metrics()
+        metrics_df = pd.DataFrame(metrics)
+        
+        if metrics_to_track:
+            metrics_df = metrics_df[metrics_df["metricName"].isin(metrics_to_track)]
+            
+        if not metrics_df.empty:
+            # Get latest value for each metric
+            metrics_df = metrics_df.sort_values(by='timestamp', ascending=False).groupby('metricName').first().reset_index()
+            metrics_df['timestamp'] = pd.to_datetime(metrics_df['timestamp'], unit='ms')
+            metrics_df['experiment'] = exp.name
+            try:
+                metrics_df["flight_name"] = exp.get_parameters_summary("flight_name")["valueCurrent"]
+            except:
+                pass
+            metrics_data.append(metrics_df)
+            
+        # Process predictions if requested
+        if include_predictions:
+            try:
+                final_predictions = exp.get_asset_by_name('final_predictions.csv', asset_type='dataframe')
+                final_predictions = pd.read_csv(io.BytesIO(final_predictions))
+                final_predictions["flight_name"] = exp.get_parameters_summary("flight_name")["valueCurrent"]
+                final_predictions["experiment"] = exp.name
+                final_predictions["timestamp"] = pd.to_datetime(exp.start_server_timestamp, unit='ms')
+                all_predictions.append(final_predictions)
+            except:
+                pass
 
-            metrics_df = metrics_df[metrics_df["metricName"].isin(
-                ["box_recall", "box_precision"])]
-
-            if not metrics_df.empty:
-                # Latest value for each metric
-                metrics_df = metrics_df.sort_values(
-                    by='timestamp', ascending=False).groupby(
-                        'metricName').first().reset_index()
-
-                metrics_df['timestamp'] = pd.to_datetime(
-                    metrics_df['timestamp'], unit='ms')
-                metrics_df['experiment'] = exp.name
-                metrics_df["flight_name"] = flight_name
-                metrics_data.append(metrics_df)
-
-            # Get final predictions
-            final_predictions = exp.get_asset_by_name('final_predictions.csv', asset_type='dataframe')
-            final_predictions = pd.read_csv(io.BytesIO(final_predictions))
-            final_predictions["flight_name"] = flight_name
-            final_predictions["experiment"] = exp.name
-            final_predictions["timestamp"] = pd.to_datetime(
-                exp.start_server_timestamp, unit='ms')
-
-            # Combined and save predictions data
-            all_predictions.append(final_predictions)
-
-    all_predictions = pd.concat(all_predictions)
-    all_predictions.to_csv("app/data/predictions.csv", index=False)
-
-    # Write to csv
-    pd.concat(metrics_data).to_csv("app/data/metrics.csv", index=False)
-
-    # Get the latest timestamp for each image_path
-    latest_timestamp = all_predictions.groupby('image_path')['timestamp'].max()
+    # Combine and save metrics
+    if metrics_data:
+        metrics_df = pd.concat(metrics_data)
+        if output_file:
+            metrics_df.to_csv(output_file, index=False)
     
-    # Get all rows that match the latest timestamp for each image_path
-    latest_predictions = all_predictions[all_predictions.apply(lambda x: x['timestamp'] == latest_timestamp[x['image_path']], axis=1)]
-    latest_predictions = latest_predictions.reset_index(drop=True)
+    # Process predictions if included
+    if include_predictions and all_predictions:
+        predictions_df = pd.concat(all_predictions)
+        predictions_df.to_csv("app/data/predictions.csv", index=False)
+        
+        # Get latest predictions
+        latest_timestamp = predictions_df.groupby('image_path')['timestamp'].max()
+        latest_predictions = predictions_df[predictions_df.apply(
+            lambda x: x['timestamp'] == latest_timestamp[x['image_path']], axis=1)]
+        latest_predictions = latest_predictions[
+            (latest_predictions['cropmodel_label'] != 'FalsePositive') & 
+            (latest_predictions['cropmodel_label'] != '0')
+        ].reset_index(drop=True)
+        
+        latest_predictions.to_csv("app/data/most_recent_all_flight_predictions.csv", index=False)
+        return metrics_df, predictions_df
+    
+    return metrics_df
 
-    # Drop FalsePositive and '0' from the label column
-    latest_predictions = latest_predictions[
-        latest_predictions['cropmodel_label'] != 'FalsePositive']
-    latest_predictions = latest_predictions[
-        latest_predictions['cropmodel_label'] != '0']
-    
-    latest_predictions.to_csv(
-        "app/data/most_recent_all_flight_predictions.csv", index=False)
-    
+def detection_model_metrics():
+    """Get the metrics for the detection model"""
+    return get_comet_metrics(
+        metric_type='detection',
+        output_file="app/data/detection_model_metrics.csv",
+        metrics_to_track=["box_recall", "box_precision", "empty_frame_accuracy"]
+    )
+
+def classification_model_metrics():
+    """Get the metrics for the classification model"""
+    return get_comet_metrics(
+        metric_type='classification',
+        output_file="app/data/classification_model_metrics.csv",
+        metrics_to_track=["Accuracy"]
+    )
+
+def flight_model_metrics():
+    """Get all experiments from the BOEM project with duration > 10min"""
+    return get_comet_metrics(
+        metric_type='pipeline',
+        output_file="app/data/metrics.csv",
+        metrics_to_track=["box_recall", "box_precision", "empty_frame_accuracy"],
+        include_predictions=True
+    )
 
 def create_shapefiles(annotations, metadata):
     """Create shapefiles for each flight_name"""

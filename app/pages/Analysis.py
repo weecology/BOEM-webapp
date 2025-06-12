@@ -77,7 +77,6 @@ def app():
             reviewed_counts,
             x='label',
             y='count',
-            title='Reviewed Species Distribution',
             labels={'label': 'Species', 'count': 'Number of Instances'}
         )
         st.plotly_chart(reviewed_fig, use_container_width=True)

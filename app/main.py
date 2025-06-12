@@ -6,14 +6,10 @@ import sys
 from pathlib import Path
 import leafmap.foliumap as leafmap
 import pandas as pd
-from pages.Species_Composition import app as species_composition_app
-from pages.Model_Development import app as model_development_app
-from pages.Analysis import app as analysis_app
-from pages.Image_viewer import app as image_viewer_app
-from pages.Bulk_Labeling import app as bulk_labeling_app
 import geopandas as gpd
 import os
 import sqlite3
+from PIL import Image
 
 st.set_page_config(
     page_title="Bureau of Ocean Energy Management - Gulf of Mexico Biodiversity Survey",
@@ -52,6 +48,12 @@ gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
 
 st.title("Bureau of Ocean Energy Management - Gulf of Mexico Biodiversity Survey")
 st.text("This application provides tools for visualizing and analyzing biodiversity data collected during aerial surveys of offshore energy development areas. The tool uses AI to detect and classify marine wildlife species in aerial images. These data are used to inform the development of offshore projects using rapid and cost-effective airborne surveys.")
+
+
+# Show the conceptual figure from app/data/conceptual_figure.png
+conceptual_figure = Image.open("app/www/conceptual_figure.png")
+st.image(conceptual_figure, caption="Raw image from a flight with detections and classifications overlaid for bottlenose dolphins", width=700, use_container_width='always')
+
 col1, col2 = st.columns(2)
 
 with col1:
@@ -72,14 +74,42 @@ with col1:
 
 with col2:
     # Display basic statistics
-    st.header("Statistics")
-    st.write(f"Current Flight: {df['flight_name'].unique()[-1]}")
+    st.subheader("Statistics")
     st.write(f"Total Observations: {len(df)}")
     st.write(f"Human-reviewed observations: {df[df['set'].isin(['train', 'validation', 'review'])].shape[0]}")
     st.write(f"Species: {df['cropmodel_label'].nunique()}")
     st.write(f"Aerial Surveys: {df['flight_name'].nunique()}")
     st.write(f"Flight Date Range: {gdf['date'].min().strftime('%Y-%m-%d')} to {gdf['date'].max().strftime('%Y-%m-%d')}")
+    
+    # Add detection backbone model metrics
+    try:
+        detection_metrics_df = pd.read_csv("app/data/detection_model_metrics.csv")
+        if not detection_metrics_df.empty:
+            # Get the most recent metrics for each requested metric
+            latest_metrics = detection_metrics_df.sort_values('timestamp').groupby('metricName').last()
+            st.subheader("Detection")
+            if 'box_recall' in latest_metrics.index:
+                st.write(f"Box Recall: {latest_metrics.loc['box_recall', 'metricValue']:.3f}")
+            if 'box_precision' in latest_metrics.index:
+                st.write(f"Box Precision: {latest_metrics.loc['box_precision', 'metricValue']:.3f}")
+            if 'empty_frame_accuracy' in latest_metrics.index:
+                st.write(f"Empty Frame Accuracy: {latest_metrics.loc['empty_frame_accuracy', 'metricValue']:.3f}")
+    except:
+        pass
 
+    # Add classification backbone model metrics
+    try:
+        classification_metrics_df = pd.read_csv("app/data/classification_model_metrics.csv")
+        if not classification_metrics_df.empty:
+            # Get the most recent metrics for each requested metric
+            latest_metrics = classification_metrics_df.sort_values('timestamp').groupby('metricName').last()
+            st.subheader("Classification")
+            if 'Accuracy' in latest_metrics.index:
+                st.write(f"Accuracy: {latest_metrics.loc['Accuracy', 'metricValue'] * 100:.2f}%")
+    except:
+        pass
+
+    
 # --- Begin Observations content ---
 def load_vector(file_path):
     if file_path.endswith('.mbtiles'):
@@ -114,7 +144,7 @@ with col2:
         selected_labels = st.multiselect(
             "Species",
             options=unique_labels,
-            default=unique_labels,
+            default=["Tursiops truncatus"],
             help="Select species to display"
         )
         human_reviewed = st.checkbox(

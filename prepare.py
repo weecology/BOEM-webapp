@@ -1,4 +1,4 @@
-from app.utils.comet_utils import get_comet_experiments, create_shapefiles
+from app.utils import comet_utils
 from extract_coordinates import extract_flight_coordinates, generate_metadata
 import pandas as pd
 
@@ -9,7 +9,9 @@ import os
 
 if __name__ == '__main__':
     # Download newest report    
-    get_comet_experiments()
+    comet_utils.flight_model_metrics()
+    comet_utils.detection_model_metrics()
+    comet_utils.classification_model_metrics()
     
     # Create shapefiles
     latest_predictions = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
@@ -24,7 +26,7 @@ if __name__ == '__main__':
             print(f"Metadata already exists for {flight_name}")
 
     generate_metadata()
-    create_shapefiles(latest_predictions, "app/data/metadata.csv")
+    comet_utils.create_shapefiles(latest_predictions, "app/data/metadata.csv")
 
     # Create images directory if it doesn't exist
     image_dir = Path("app/data/images")
