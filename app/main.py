@@ -148,7 +148,7 @@ with col2:
             help="Select species to display"
         )
         human_reviewed = st.checkbox(
-            "Only Human-reviewed images",
+            "Only human-reviewed images",
             value=True,
             help="If checked, only images in the 'train', 'validation', or 'review' sets will be shown."
         )
@@ -212,8 +212,8 @@ with col2:
             st.error(f"Error preparing download: {str(e)}")
 st.info("""
 **How to use:**
-- Click on any point on the map to view its metadata
-- Use the confidence score slider to filter observations
+- Click on any point on the map to view its metadata and download the image (limited to 100 per species)
+- Use the confidence score slider to filter observations. Observations with low confidence scores (<0.6) are likely to be false positives and excluded from analysis.
 - Select species to show/hide from the map
 """)
 # --- End Observations content ---

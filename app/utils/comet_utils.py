@@ -93,13 +93,11 @@ def get_comet_metrics(metric_type='pipeline', output_file=None, metrics_to_track
         predictions_df.to_csv("app/data/predictions.csv", index=False)
         
         # Get latest predictions
-        latest_timestamp = predictions_df.groupby('image_path')['timestamp'].max()
-        latest_predictions = predictions_df[predictions_df.apply(
-            lambda x: x['timestamp'] == latest_timestamp[x['image_path']], axis=1)]
-        latest_predictions = latest_predictions[
-            (latest_predictions['cropmodel_label'] != 'FalsePositive') & 
-            (latest_predictions['cropmodel_label'] != '0')
-        ].reset_index(drop=True)
+        # Get the latest date for each flight_name
+        latest_dates = predictions_df.groupby('flight_name')['timestamp'].max().reset_index()
+
+        # Merge to get all predictions from the latest date for each flight_name
+        latest_predictions = predictions_df.merge(latest_dates, on=['flight_name', 'timestamp'])
         
         latest_predictions.to_csv("app/data/most_recent_all_flight_predictions.csv", index=False)
         return metrics_df, predictions_df

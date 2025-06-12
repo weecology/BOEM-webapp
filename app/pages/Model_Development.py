@@ -38,13 +38,11 @@ def create_comet_links(experiment_id):
 def app():
     st.header("Model Development")
     st.text("Machine learning models are developed in collaboration with the University of Florida. The detection model identifies objects of interest, and the classification model classifies them the finest level of detail possible. The model for each flight starts from a backbone model trained on the entire dataset and additional data from the ecological monitoring community. It is then customized for each flight.")
-    st.header("Backbone Models")
 
-    st.header("Detection Model")
+    st.header("Detection Backbone")
     # --- Detection Model Metrics Section ---
     try:
-        detection_metrics_df = pd.read_csv("app/data/detection_metrics.csv")
-        st.subheader("Detection Model Metrics Over Time")
+        detection_metrics_df = pd.read_csv("app/data/detection_model_metrics.csv")
         # Plot detection metrics
         if not detection_metrics_df.empty:
             fig_detection = px.line(
