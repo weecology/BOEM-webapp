@@ -14,6 +14,12 @@ def create_metric_plots(metrics_df):
         title='Metrics Over Time'
     )
     
+    fig_metrics.update_layout(
+        height=400,
+        margin=dict(l=20, r=20, t=40, b=20),
+        showlegend=False
+    )
+    
     return fig_metrics
 
 def create_comet_links(experiment_id):
@@ -43,6 +49,7 @@ def app():
     # --- Detection Model Metrics Section ---
     try:
         detection_metrics_df = pd.read_csv("app/data/detection_model_metrics.csv")
+        st.subheader("Detection Model Metrics Over Time")
         # Plot detection metrics
         if not detection_metrics_df.empty:
             fig_detection = px.line(
@@ -52,6 +59,16 @@ def app():
                 color='metricName',
                 title='Detection Model Metrics Over Time',
                 labels={'timestamp': 'Timestamp', 'metricValue': 'Metric Value', 'metricName': 'Metric'}
+            )
+            fig_detection.update_layout(
+                height=400,
+                margin=dict(l=20, r=20, t=40, b=20),
+                legend=dict(
+                    yanchor="top",
+                    y=0.99,
+                    xanchor="left",
+                    x=1.02
+                )
             )
             st.plotly_chart(fig_detection, use_container_width=True)
             # Show table
@@ -77,6 +94,16 @@ def app():
                 title='Classification Model Metrics Over Time',
                 labels={'timestamp': 'Timestamp', 'metricValue': 'Metric Value', 'metricName': 'Metric'}
             )
+            fig_classification.update_layout(
+                height=400,
+                margin=dict(l=20, r=20, t=40, b=20),
+                legend=dict(
+                    yanchor="top",
+                    y=0.99,
+                    xanchor="left",
+                    x=1.02
+                )
+            )
             st.plotly_chart(fig_classification, use_container_width=True)
             # Show table
             with st.expander("View Classification Model Metrics Data"):
@@ -85,6 +112,49 @@ def app():
             st.info("No classification model metrics available.")
     except Exception as e:
         st.warning(f"Could not load classification model metrics: {e}")
+
+    # --- Latest Flight Metrics Comparison ---
+    st.header("Latest Flight Metrics")
+    try:
+        metrics_df = pd.read_csv("app/data/metrics.csv")
+        if not metrics_df.empty:
+            # Get the latest metrics for each flight and metric
+            latest_metrics = metrics_df.sort_values('timestamp').groupby(['flight_name', 'metricName']).last().reset_index()
+            
+            # Create bar chart
+            fig_latest = px.bar(
+                latest_metrics,
+                x='flight_name',
+                y='metricValue',
+                color='metricName',
+                title='Latest Metrics by Flight',
+                labels={
+                    'flight_name': 'Flight',
+                    'metricValue': 'Metric Value',
+                    'metricName': 'Metric'
+                },
+                barmode='group'
+            )
+            fig_latest.update_layout(
+                height=400,
+                margin=dict(l=20, r=20, t=40, b=20),
+                xaxis_tickangle=-45,
+                legend=dict(
+                    yanchor="top",
+                    y=0.99,
+                    xanchor="left",
+                    x=1.02
+                )
+            )
+            st.plotly_chart(fig_latest, use_container_width=True)
+            
+            # Show table
+            with st.expander("View Latest Metrics Data"):
+                st.dataframe(latest_metrics)
+        else:
+            st.info("No flight metrics available.")
+    except Exception as e:
+        st.warning(f"Could not load flight metrics: {e}")
 
     st.header("Flight Model Metrics")
     metrics_df = pd.read_csv("app/data/metrics.csv")

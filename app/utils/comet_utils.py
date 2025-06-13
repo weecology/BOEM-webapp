@@ -136,6 +136,7 @@ def create_shapefiles(annotations, metadata):
     annotations["unique_image"] = annotations["image_path"].apply(lambda x: os.path.splitext(x)[0]).str.split("_").str.join("_")
 
     # All together as one shapefile
+    metadata_df["unique_image"] = metadata_df["unique_image"].apply(lambda x: x.split("\\")[-1])
     merged_predictions = annotations.merge(metadata_df[["unique_image", "flight_name","date","lat","long"]], on='unique_image')
     gdf = gpd.GeoDataFrame(merged_predictions, geometry=gpd.points_from_xy(merged_predictions.long, merged_predictions.lat))
     gdf.crs = "EPSG:4326"
