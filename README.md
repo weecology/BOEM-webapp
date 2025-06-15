@@ -1,114 +1,58 @@
-# Bureau of Ocean Energy Management Geospatial Data Viewer
+# eBird Media Finder
 
-A web application for visualizing and analyzing biodiversity data collected during aerial surveys of offshore wind energy areas.
+A Python tool to automate finding media records from the Macaulay Library based on species, location, and time criteria.
 
-## 🔧 Installation
+## Features
 
-### Prerequisites
-- Python 3.8 or higher
-- Git
+- Search for bird media (audio/video) using the eBird API and Macaulay Library
+- Support for species list input or direct eBird API queries
+- Generate CSV reports with media catalog IDs and metadata
+- Filter by location, date range, and media type
+- Automated taxonomy lookup using the Clements Checklist
 
-### Setup
+## Installation
 
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/BOEM-webapp.git
-cd BOEM-webapp
-```
-
-2. Create and activate a virtual environment:
-```bash
-# On Windows
-python -m venv venv
-venv\Scripts\activate
-
-# On macOS/Linux
-python3 -m venv venv
-source venv/bin/activate
-```
-
-3. Install required dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-### Environment Configuration
+## Configuration
 
-Create a `.env` file in the project root with the following configuration:
+1. Get an eBird API key from https://ebird.org/api/keygen
+2. Set your API key as an environment variable:
 ```bash
-REPORT_SERVER_HOST=your_server_host
-REPORT_SERVER_USER=your_username
-REPORT_DIR=/path/to/reports/directory
+export EBIRD_API_KEY=your_key_here
 ```
 
-Replace the values with your specific configuration:
-- `REPORT_SERVER_HOST`: The host server for reports (e.g., hpg.rc.ufl.edu)
-- `REPORT_SERVER_USER`: Your server username
-- `REPORT_DIR`: Full path to the reports directory on the server
+## Usage
 
-## 🚀 Running the Application
+### Using a species list:
+```python
+from ebird_media_finder import MediaFinder
 
-1. Ensure you're in the project directory with your virtual environment activated
-
-2. Start the Streamlit app:
-```bash
-streamlit run app/main.py
+finder = MediaFinder()
+results = finder.search_species(
+    species_list=["American Robin", "Blue Jay"],
+    region="US-NY",
+    month_range=(5, 5)  # May only
+)
+results.to_csv("media_results.csv")
 ```
 
-3. The application will open in your default web browser at `http://localhost:8501`
-
-## 📁 Project Structure
-
-```
-BOEM-webapp/
-├── app/
-│   ├── main.py              # Main application entry point
-│   ├── pages/              
-│   │   ├── Model_Development.py
-│   │   ├── Observations.py
-│   │   ├── Video.py
-│   │   └── ...
-│   └── utils/
-│       └── vector_utils.py
-├── .env                    # Environment configuration
-├── .vscode/
-│   └── launch.json        # VS Code debug configuration
-├── prepare.py             # Data preparation script
-├── requirements.txt       # Python dependencies
-└── README.md
+### Using eBird API for recent observations:
+```python
+results = finder.search_recent_observations(
+    region="US-NY",
+    days_back=7
+)
+results.to_csv("recent_observations.csv")
 ```
 
-## 🛠️ Features
+## Contributing
 
-- Interactive visualization of biodiversity survey data
-- Marine wildlife species detection and classification
-- Distribution maps and abundance estimates
-- Temporal and spatial pattern analysis
-- Video playback of flight line footage
-- Image galleries of detected species
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a new branch for your feature
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## 💬 Support
-
-For support:
-- Open an issue in the repository
-- Contact the project maintainers
-
-## 📜 License
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- Bureau of Ocean Energy Management
-- University of Florida Research Computing
-- Streamlit team
-- All contributors and maintainers
 
