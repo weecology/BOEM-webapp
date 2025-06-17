@@ -159,6 +159,14 @@ if default_file.exists():
         help="If checked, only images in the 'train', 'validation', or 'review' sets will be shown."
     )
     m.add_basemap("OpenStreetMap")
+    m.add_wms_layer(
+        url="https://wms.gebco.net/mapserv?",
+        layers="GEBCO_LATEST",
+        name="GEBCO Bathymetry",
+        format="image/png",
+        transparent=True,
+        attribution="GEBCO"
+    )
     try:
         filtered_gdf = gdf_obs[
             (gdf_obs['score'] >= score_threshold) &
