@@ -8,7 +8,6 @@ import leafmap.foliumap as leafmap
 import pandas as pd
 import geopandas as gpd
 import os
-import sqlite3
 from PIL import Image
 
 st.set_page_config(
@@ -17,7 +16,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Read the data
+# Read the data 
 data_path = Path(__file__).parent / "data" / "most_recent_all_flight_predictions.csv"
 
 if not data_path.exists():
@@ -30,6 +29,9 @@ if str(app_dir) not in sys.path:
     sys.path.append(str(app_dir))
 
 df = pd.read_csv(data_path)
+
+df = df.loc[df.score>0.7]
+
 # Only keep two word labels
 df = df[df["cropmodel_label"].str.count(" ") == 1]
 
@@ -74,6 +76,7 @@ with col1:
 
 with col2:
     # Display basic statistics
+    # Statistics have a min score of 0.7
     st.subheader("Statistics")
     st.write(f"Total Observations: {len(df)}")
     st.write(f"Human-reviewed observations: {df[df['set'].isin(['train', 'validation', 'review'])].shape[0]}")
@@ -134,23 +137,24 @@ default_file = app_data_dir / "all_predictions.shp"
 if default_file.exists():
     gdf_obs = gpd.read_file(default_file)
     gdf_obs = gdf_obs[gdf_obs['cropmodel_'].notna()]
+    predictions_df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
     unique_labels = sorted(gdf_obs['cropmodel_'].unique())
     score_threshold = st.slider(
         "Detection Confidence",
         min_value=0.0,
         max_value=1.0,
-        value=0.7,
+        value=0.6,
         step=0.05,
         help="Filter observations by detection confidence"
     )
     selected_labels = st.multiselect(
         "Species",
         options=unique_labels,
-        default=["Tursiops truncatus"],
+        default=["Tursiops truncatus","Delphinidae","Stenella frontalis"],
         help="Select species to display"
     )
     human_reviewed = st.checkbox(
-        "Only human-reviewed images",
+        "Only Human-reviewed images",
         value=True,
         help="If checked, only images in the 'train', 'validation', or 'review' sets will be shown."
     )
@@ -165,12 +169,9 @@ if default_file.exists():
         if len(filtered_gdf) == 0:
             st.warning("No observations meet the selected filters")
         else:
-            api_key = os.getenv('COMET_API_KEY')
-            filtered_gdf['image_link'] = filtered_gdf['crop_api_p'].apply(
-                lambda x: f'<a href="{x}&apiKey={api_key}" target="_blank">View Image</a>'
-            )
+            # Remove image_link/crop_api_path logic
             filtered_gdf = filtered_gdf[['score', 'cropmodel_', 'cropmode_1', 'set',
-                            'flight_n_1', 'date', 'lat', 'long', 'image_link', 'geometry']].rename(columns={
+                            'flight_n_1', 'date', 'lat', 'long', 'crop_image', 'geometry']].rename(columns={
                 'score': 'Detection Score',
                 'cropmodel_': 'Species',
                 'cropmode_1': 'Species Confidence',
@@ -179,18 +180,37 @@ if default_file.exists():
                 'date': 'Date',
                 'lat': 'Latitude',
                 'long': 'Longitude',
-                'image_link': 'View Image'
+                'crop_image': 'Image'
             })
+
             m.add_gdf(
                 filtered_gdf,
                 layer_name=f"Observations (score ≥ {score_threshold})",
                 style={'color': "#0000FF"},
                 info_mode='on_click',
-                hover_style={'sticky': True}
+                hover_style={'sticky': True},
+                info_columns=['Image']
             )
     except Exception as e:
         st.error(f"Error processing vector data: {str(e)}")
     m.to_streamlit(height=700, width=None)
+    # Gallery of up to 20 images below the map
+    gallery_images = filtered_gdf['Image'].dropna().unique()[:20]
+    if len(gallery_images) > 0:
+        st.subheader("Selected Observations")
+        cols = st.columns(3)
+        for idx, img in enumerate(gallery_images):
+            img_path = Path("app/data/images") / str(img)
+            with cols[idx % 3]:
+                if img_path.exists():
+                    # Add confidence score to caption
+                    confidence_score = filtered_gdf[filtered_gdf['Image'] == img]['Species Confidence'].values[0]
+                    st.image(str(img_path), caption=f"{img} (Confidence: {confidence_score:.2f})", use_container_width=True)
+                else:
+                    st.info(f"Image {img} not found.")
+    else:
+        st.info("No images available for the selected observations.")
+
     # Download button for filtered data
     try:
         temp_file = app_data_dir / "temp_filtered.shp"

@@ -2,8 +2,6 @@ from app.utils import comet_utils
 from extract_coordinates import extract_flight_coordinates, generate_metadata
 import pandas as pd
 
-# Download images from API paths
-import requests
 from pathlib import Path
 import os
 
@@ -28,29 +26,6 @@ if __name__ == '__main__':
     generate_metadata()
     comet_utils.create_shapefiles(latest_predictions, "app/data/metadata.csv")
 
-    # Create images directory if it doesn't exist
-    image_dir = Path("app/data/images")
-    image_dir.mkdir(parents=True, exist_ok=True)
-
-    # Download images from API paths - limit to 100 per label
-    for label in latest_predictions['cropmodel_label'].unique():
-        # Get rows for this label and take first 100
-        label_predictions = latest_predictions[latest_predictions['cropmodel_label'] == label].head(100)
-        
-        for _, row in label_predictions.iterrows():
-            if pd.isna(row['crop_api_path']):
-                continue
-                
-            image_path = image_dir / f"{row['crop_image_id']}"
-            
-            # Skip if image already exists
-            if image_path.exists():
-                continue
-                
-            try:
-                response = requests.get(row['crop_api_path'])
-                response.raise_for_status()
-                with open(image_path, 'wb') as f:
-                    f.write(response.content)
-            except Exception as e:
-                print(f"Error downloading {row['crop_api_path']}: {e}")
+    # Download images
+    for experiment in latest_predictions['experiment'].unique():
+        comet_utils.download_images(save_dir="app/static/images", experiment=experiment)

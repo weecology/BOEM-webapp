@@ -5,6 +5,7 @@ import pandas as pd
 import io
 from pathlib import Path
 import geopandas as gpd
+import zipfile
 
 # Load environment variables
 load_dotenv()
@@ -90,8 +91,11 @@ def get_comet_metrics(metric_type='pipeline', output_file=None, metrics_to_track
     # Process predictions if included
     if include_predictions and all_predictions:
         predictions_df = pd.concat(all_predictions)
-        predictions_df.to_csv("app/data/predictions.csv", index=False)
         
+        # the train, validation and review rows need to set detection score to 1
+        predictions_df.loc[predictions_df['set'].isin(['train', 'validation', 'review']), 'score'] = 1
+        predictions_df.to_csv("app/data/predictions.csv", index=False)
+
         # Get latest predictions
         # Get the latest date for each flight_name
         latest_dates = predictions_df.groupby('flight_name')['timestamp'].max().reset_index()
@@ -143,30 +147,30 @@ def create_shapefiles(annotations, metadata):
     gdf.to_file("app/data/all_predictions.shp", driver='ESRI Shapefile')
 
 def download_images(experiment, save_dir='app/data/images'):
-    """Download all images logged to a Comet experiment"""
+    """Download all images as crops.zip from a Comet experiment and unzip them"""
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
     api = API(api_key=os.getenv('COMET_API_KEY'))
     workspace = os.getenv('COMET_WORKSPACE')
 
-    # Get all experiments from the BOEM project
-    experiment = api.get(f"{workspace}/boem",experiment=experiment)
+    # Get the experiment object
+    experiment = api.get(f"{workspace}/boem", experiment=experiment)
 
-    # Get all assets that are images
-    image_assets = experiment.get_asset_list(asset_type='image')
+    # Find crops.zip asset
+    assets = experiment.get_asset_list()
+    crops_zip_asset = next((a for a in assets if a['fileName'] == 'crops.zip'), None)
+    if crops_zip_asset is None:
+        print("No crops.zip found in experiment assets.")
+        return
 
-    # Download each image
-    image_data = []
-    for asset in image_assets:
-        if asset["metadata"] is None:
-            continue
+    # Download crops.zip
+    zip_data = experiment.get_asset(crops_zip_asset['assetId'])
+    zip_path = save_dir / 'crops.zip'
+    with open(zip_path, 'wb') as f:
+        f.write(zip_data)
 
-        image_name = asset['fileName']
-        image_path = save_dir / (image_name if image_name.endswith('.png') else f"{image_name}.png")
-
-        # Only download if doesn't exist
-        if not image_path.exists():
-            image_data = experiment.get_asset(asset['assetId'])
-            with open(image_path, 'wb') as f:
-                f.write(image_data)
+    # Unzip crops.zip
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(save_dir)
+    zip_path.unlink()  # Remove the zip file after extraction
