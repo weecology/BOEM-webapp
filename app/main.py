@@ -150,7 +150,7 @@ if default_file.exists():
     selected_labels = st.multiselect(
         "Species",
         options=unique_labels,
-        default=["Tursiops truncatus","Delphinidae","Stenella frontalis"],
+        default=["Tursiops truncatus","Delphinidae"],
         help="Select species to display"
     )
     human_reviewed = st.checkbox(

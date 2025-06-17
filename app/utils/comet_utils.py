@@ -146,16 +146,16 @@ def create_shapefiles(annotations, metadata):
     gdf.crs = "EPSG:4326"
     gdf.to_file("app/data/all_predictions.shp", driver='ESRI Shapefile')
 
-def download_images(experiment, save_dir='app/data/images'):
+def download_images(experiment_name, save_dir='app/data/images'):
     """Download all images as crops.zip from a Comet experiment and unzip them"""
-    save_dir = Path(save_dir)
+    save_dir = Path(save_dir) / experiment_name
     save_dir.mkdir(parents=True, exist_ok=True)
 
     api = API(api_key=os.getenv('COMET_API_KEY'))
     workspace = os.getenv('COMET_WORKSPACE')
 
     # Get the experiment object
-    experiment = api.get(f"{workspace}/boem", experiment=experiment)
+    experiment = api.get(f"{workspace}/boem", experiment=experiment_name)
 
     # Find crops.zip asset
     assets = experiment.get_asset_list()
@@ -166,7 +166,7 @@ def download_images(experiment, save_dir='app/data/images'):
 
     # Download crops.zip
     zip_data = experiment.get_asset(crops_zip_asset['assetId'])
-    zip_path = save_dir / 'crops.zip'
+    zip_path = save_dir / f'{experiment.name}.zip'
     with open(zip_path, 'wb') as f:
         f.write(zip_data)
 
@@ -174,3 +174,4 @@ def download_images(experiment, save_dir='app/data/images'):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(save_dir)
     zip_path.unlink()  # Remove the zip file after extraction
+

@@ -4,6 +4,7 @@ import pandas as pd
 
 from pathlib import Path
 import os
+import shutil
 
 if __name__ == '__main__':
     # Download newest report    
@@ -27,5 +28,10 @@ if __name__ == '__main__':
     comet_utils.create_shapefiles(latest_predictions, "app/data/metadata.csv")
 
     # Download images
-    for experiment in latest_predictions['experiment'].unique():
-        comet_utils.download_images(save_dir="app/static/images", experiment=experiment)
+    for experiment_name in latest_predictions['experiment'].unique():
+        comet_utils.download_images(save_dir="app/data/images", experiment_name=experiment_name)
+        # Combine all images into a single directory
+        for image in os.listdir(f"app/data/images/{experiment_name}"):
+            shutil.move(f"app/data/images/{experiment_name}/{image}", f"app/data/images/{image}")
+        # Remove the experiment directory
+        shutil.rmtree(f"app/data/images/{experiment_name}")
