@@ -4,6 +4,7 @@ import plotly.express as px
 from pathlib import Path
 from utils.styling import load_css
 import geopandas as gpd
+from utils.auth import require_login
 
 def create_label_count_plots(label_counts_df):
     """Create plots showing label distributions over time"""
@@ -29,6 +30,7 @@ def create_label_count_plots(label_counts_df):
     return fig_hist
 
 def app():
+    require_login()
     st.title("Species Analysis")
     app_data_dir = Path(__file__).parents[1] / "data"
     default_file = app_data_dir / "most_recent_all_flight_predictions.csv"

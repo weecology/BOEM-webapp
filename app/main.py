@@ -9,12 +9,16 @@ import pandas as pd
 import geopandas as gpd
 import os
 from PIL import Image
+from utils.auth import require_login
 
 st.set_page_config(
     page_title="Bureau of Ocean Energy Management - Gulf of Mexico Biodiversity Survey",
     page_icon="🦅",
     layout="wide"
 )
+
+# Require login for all content
+require_login()
 
 # Read the data 
 data_path = Path(__file__).parent / "data" / "most_recent_all_flight_predictions.csv"

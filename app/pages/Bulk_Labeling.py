@@ -6,6 +6,7 @@ import os
 import json
 from datetime import datetime
 from utils.styling import load_css
+from utils.auth import require_login
 
 def get_all_species(taxonomy_data):
     """Extract all species from the taxonomy data"""
@@ -42,6 +43,7 @@ def load_or_create_annotations():
         ])
 
 def app():
+    require_login()
     st.title("Bulk Image Labeling")
     st.text("Select multiple images and update their labels in bulk")
 
@@ -147,7 +149,7 @@ def app():
                     'original_label': original_label,
                     'new_label': new_label,
                     'timestamp': datetime.now().isoformat(),
-                    'user': 'streamlit_user'  # Could be replaced with actual user authentication
+                    'user': st.session_state.get('username', 'streamlit_user')
                 })
             
             # Append new annotations to the dataframe

@@ -3,8 +3,10 @@ from pathlib import Path
 from PIL import Image
 from utils.styling import load_css
 import pandas as pd
+from utils.auth import require_login
 
 def app():
+    require_login()
     st.title("Predictions Viewer")
     # Get experiment data
     image_df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
