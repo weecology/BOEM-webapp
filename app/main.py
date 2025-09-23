@@ -12,7 +12,7 @@ from PIL import Image
 from utils.auth import require_login
 
 st.set_page_config(
-    page_title="Bureau of Ocean Energy Management - Gulf of Mexico Biodiversity Survey",
+    page_title="Bureau of Ocean Energy Management - Gulf of America Biodiversity Survey",
     page_icon="🦅",
     layout="wide"
 )
@@ -52,7 +52,7 @@ df["timestamp"] = datetime_values.astype(str)
 gdf = gpd.read_file(data_path.parent / "all_predictions.shp")
 gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
 
-st.title("Bureau of Ocean Energy Management - Gulf of Mexico Biodiversity Survey")
+st.title("Bureau of Ocean Energy Management - Gulf of America Biodiversity Survey")
 st.text("This application provides tools for visualizing and analyzing biodiversity data collected during aerial surveys of offshore energy development areas. The tool uses AI to detect and classify marine wildlife species in aerial images. These data are used to inform the development of offshore projects using rapid and cost-effective airborne surveys.")
 
 
