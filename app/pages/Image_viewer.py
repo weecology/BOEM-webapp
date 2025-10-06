@@ -53,13 +53,31 @@ def app():
     
     # Create image grid with 3 columns
     cols = st.columns(3)
+    # Track which image is selected to show caption on click
+    if 'selected_image_name' not in st.session_state:
+        st.session_state.selected_image_name = None
+
     for idx, (_, row) in enumerate(species_images.iterrows()):
         with cols[idx % 3]:
             try:
-                image = Image.open(f"app/data/images/{row['crop_image_id']}")
-                st.image(image, use_container_width=True)
+                image_path = f"app/data/images/{row['crop_image_id']}"
+                image = Image.open(image_path)
+                # Show caption only if this image is selected
+                caption_text = row['crop_image_id'] if st.session_state.selected_image_name == row['crop_image_id'] else None
+                st.image(image, use_container_width=True, caption=caption_text)
+                if st.button("Select", key=f"select_{idx}_{row['crop_image_id']}"):
+                    st.session_state.selected_image_name = row['crop_image_id']
             except Exception as e:
                 st.error(f"Error loading image: {str(e)}")
+
+    # Larger preview of the selected image with filename caption
+    if st.session_state.selected_image_name:
+        st.subheader("Selected Image")
+        preview_path = f"app/data/images/{st.session_state.selected_image_name}"
+        try:
+            st.image(preview_path, caption=st.session_state.selected_image_name, use_container_width=True)
+        except Exception:
+            st.info(f"Selected image not found: {st.session_state.selected_image_name}")
                     
 if __name__ == "__main__":
     load_css()

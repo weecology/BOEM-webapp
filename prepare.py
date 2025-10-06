@@ -35,3 +35,4 @@ if __name__ == '__main__':
             shutil.move(f"app/data/images/{experiment_name}/{image}", f"app/data/images/{image}")
         # Remove the experiment directory
         shutil.rmtree(f"app/data/images/{experiment_name}")
+

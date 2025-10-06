@@ -81,7 +81,7 @@ with col1:
 with col2:
     # Display basic statistics
     # Statistics have a min score of 0.7
-    st.subheader("Statistics")
+    st.subheader("Progress")
     st.write(f"Total Observations: {len(df)}")
     st.write(f"Human-reviewed observations: {df[df['set'].isin(['train', 'validation', 'review'])].shape[0]}")
     st.write(f"Species: {df['cropmodel_label'].nunique()}")
@@ -93,7 +93,7 @@ with col2:
         detection_metrics_df = pd.read_csv("app/data/detection_model_metrics.csv")
         if not detection_metrics_df.empty:
             latest_metrics = detection_metrics_df.sort_values('timestamp').groupby('metricName').last()
-            st.subheader("Detection Backbone Model Metrics")
+            st.subheader("Detection Model")
             if 'box_recall' in latest_metrics.index:
                 st.write(f"Box Recall: {latest_metrics.loc['box_recall', 'metricValue']:.3f}")
             if 'box_precision' in latest_metrics.index:
@@ -111,11 +111,21 @@ with col2:
         if not classification_metrics_df.empty:
             # Get the most recent metrics for each requested metric
             latest_metrics = classification_metrics_df.sort_values('timestamp').groupby('metricName').last()
-            st.subheader("Classification Backbone Model Metrics")
+            st.subheader("Classification Model")
             if 'Accuracy' in latest_metrics.index:
                 st.write(f"Accuracy: {latest_metrics.loc['Accuracy', 'metricValue']:.3f}")
             if 'Precision' in latest_metrics.index:
                 st.write(f"Precision: {latest_metrics.loc['Precision', 'metricValue']:.3f}")
+            # Add HTML link to the latest classification experiment's Confusion Matrix on Comet
+            try:
+                latest_experiment = classification_metrics_df.sort_values('timestamp').iloc[-1]['experiment']
+                comet_confusion_url = f"https://www.comet.com/bw4sz/boem/{latest_experiment}?experiment-tab=confusionMatrix"
+                st.markdown(
+                    f'<a href="{comet_confusion_url}" target="_blank">View Classification Confusion Matrix</a>',
+                    unsafe_allow_html=True
+                )
+            except Exception:
+                pass
     except:
         pass
 
@@ -146,7 +156,7 @@ if default_file.exists():
     score_threshold = st.slider(
         "Detection Confidence",
         min_value=0.0,
-        max_value=1.0,
+        max_value=2.0,
         value=0.6,
         step=0.05,
         help="Filter observations by detection confidence"

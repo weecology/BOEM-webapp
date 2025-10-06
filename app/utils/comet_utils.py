@@ -92,8 +92,8 @@ def get_comet_metrics(metric_type='pipeline', output_file=None, metrics_to_track
     if include_predictions and all_predictions:
         predictions_df = pd.concat(all_predictions)
         
-        # the train, validation and review rows need to set detection score to 1
-        predictions_df.loc[predictions_df['set'].isin(['train', 'validation', 'review']), 'score'] = 1
+        # For human-reviewed rows (train/validation/review), set detection score to 2
+        predictions_df.loc[predictions_df['set'].isin(['train', 'validation', 'review']), 'score'] = 2
         predictions_df.to_csv("app/data/predictions.csv", index=False)
 
         # Get latest predictions
