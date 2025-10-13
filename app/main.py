@@ -20,7 +20,7 @@ st.set_page_config(
 # Require login for all content
 require_login()
 
-# Read the data 
+# Read the data
 data_path = Path(__file__).parent / "data" / "most_recent_all_flight_predictions.csv"
 
 if not data_path.exists():
@@ -38,17 +38,6 @@ df = df.loc[df.score>0.7]
 
 # Only keep two word labels
 df = df[df["cropmodel_label"].str.count(" ") == 1]
-
-# The flight name has the time stamp, so we need to remove it
-# Split flight name into parts and get the date component
-date_component = df["flight_name"].str.split("_").str[1]
-
-# Convert to datetime 
-datetime_values = pd.to_datetime(date_component)
-
-# Format as YYYY-MM-DD string
-df["timestamp"] = datetime_values.astype(str)
-
 gdf = gpd.read_file(data_path.parent / "all_predictions.shp")
 gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
 
@@ -86,8 +75,7 @@ with col2:
     st.write(f"Human-reviewed observations: {df[df['set'].isin(['train', 'validation', 'review'])].shape[0]}")
     st.write(f"Species: {df['cropmodel_label'].nunique()}")
     st.write(f"Aerial Surveys: {df['flight_name'].nunique()}")
-    st.write(f"Flight Date Range: {gdf['date'].min().strftime('%Y-%m-%d')} to {gdf['date'].max().strftime('%Y-%m-%d')}")
-    
+
     # Add detection backbone model metrics
     try:
         detection_metrics_df = pd.read_csv("app/data/detection_model_metrics.csv")
