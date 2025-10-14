@@ -37,7 +37,7 @@ def app():
     df = pd.read_csv(default_file)
     df = df[df["cropmodel_label"].str.count(" ") == 1]
     date_component = df["flight_name"].str.split("_").str[1]
-    datetime_values = pd.to_datetime(date_component)
+    datetime_values = pd.to_datetime(date_component, format='%Y%m%d', errors='coerce')
     df["timestamp"] = datetime_values.astype(str)
     gdf = gpd.read_file(default_file.parent / "all_predictions.shp")
     gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
