@@ -7,13 +7,14 @@ import os
 import shutil
 
 if __name__ == '__main__':
-    # Download newest report    
+    # Download newest report
     comet_utils.flight_model_metrics()
     comet_utils.detection_model_metrics()
     comet_utils.classification_model_metrics()
-    
+
     # Create shapefiles
-    latest_predictions = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
+    latest_predictions = pd.read_csv(
+        "app/data/most_recent_all_flight_predictions.csv")
 
     # Lookup metadata for images
     for flight_name in latest_predictions['flight_name'].unique():
@@ -29,10 +30,11 @@ if __name__ == '__main__':
 
     # Download images
     for experiment_name in latest_predictions['experiment'].unique():
-        comet_utils.download_images(save_dir="app/data/images", experiment_name=experiment_name)
+        comet_utils.download_images(save_dir="app/data/images",
+                                    experiment_name=experiment_name)
         # Combine all images into a single directory
         for image in os.listdir(f"app/data/images/{experiment_name}"):
-            shutil.move(f"app/data/images/{experiment_name}/{image}", f"app/data/images/{image}")
+            shutil.move(f"app/data/images/{experiment_name}/{image}",
+                        f"app/data/images/{image}")
         # Remove the experiment directory
         shutil.rmtree(f"app/data/images/{experiment_name}")
-

@@ -19,7 +19,7 @@ def app():
         "Detection Confidence Threshold",
         min_value=0.0,
         max_value=1.0,
-        value=0.6,
+        value=0.8,
         step=0.01
     )
 
