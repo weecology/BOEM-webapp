@@ -25,7 +25,7 @@ def app():
     # Add human-reviewed filter
     human_reviewed = st.checkbox(
         "Human-reviewed",
-        value=False,
+        value=True,
         help="Show only images that have been reviewed by a human")
 
     if image_df is None:
