@@ -10,6 +10,7 @@ import geopandas as gpd
 import os
 from PIL import Image
 from utils.auth import require_login
+from utils.annotations import load_annotations, apply_annotations, apply_annotations_to_gdf
 
 st.set_page_config(
     page_title="Bureau of Ocean Energy Management - Gulf of America Biodiversity Survey",
@@ -34,11 +35,17 @@ if str(app_dir) not in sys.path:
 
 df = pd.read_csv(data_path)
 
+# Apply overrides to predictions table
+annotations_df = load_annotations("app/data/annotations.csv")
+df = apply_annotations(df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
+
 df = df.loc[df.score>0.7]
 
 # Only keep two word labels
 df = df[df["cropmodel_label"].str.count(" ") == 1]
 gdf = gpd.read_file(data_path.parent / "all_predictions.shp")
+# Apply overrides to geodataframe (join on crop_image)
+gdf = apply_annotations_to_gdf(gdf, annotations_df, gdf_image_col="crop_image", gdf_label_col="cropmodel_", gdf_set_col="set")
 gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
 
 st.title("Bureau of Ocean Energy Management - Gulf of America Biodiversity Survey")

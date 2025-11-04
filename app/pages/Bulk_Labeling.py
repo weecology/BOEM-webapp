@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from utils.styling import load_css
 from utils.auth import require_login
+from utils.annotations import load_annotations, reduce_annotations
 
 def get_all_species(taxonomy_data):
     """Extract all species from the taxonomy data"""
@@ -65,6 +66,7 @@ def app():
     
     # Load or create annotations dataframe
     annotations_df = load_or_create_annotations()
+    latest_annotations = reduce_annotations(annotations_df)
     
     # Load taxonomy data
     with open("app/data/taxonomy.json", 'r') as f:
@@ -83,22 +85,47 @@ def app():
         default=[]
     )
     
-    # Filter the dataframe based on selected labels
+    # Optional flight filter
+    flights = sorted(predictions_df['flight_name'].unique()) if 'flight_name' in predictions_df.columns else []
+    selected_flights = st.multiselect(
+        "Filter by flight",
+        options=flights,
+        default=[]
+    ) if flights else []
+
+    # Filter the dataframe based on selected labels and flights
+    filtered_df = predictions_df
     if selected_labels:
-        filtered_df = predictions_df[predictions_df['cropmodel_label'].isin(selected_labels)]
-    else:
-        filtered_df = predictions_df
+        filtered_df = filtered_df[filtered_df['cropmodel_label'].isin(selected_labels)]
+    if selected_flights:
+        filtered_df = filtered_df[filtered_df['flight_name'].isin(selected_flights)]
     
     # Get all images from the images directory
     image_dir = Path("app/data/images")
     image_files = list(image_dir.glob("*"))
-    
+
     # Filter images that exist in our dataframe
     valid_images = [img for img in image_files if img.name in filtered_df['crop_image_id'].values]
+
+    # Pagination controls
+    st.subheader("Select Images to Relabel")
+    page_size = st.selectbox("Images per page", options=[24, 36, 48, 60], index=0)
+    total = len(valid_images)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
+    start = (page - 1) * page_size
+    end = min(start + page_size, total)
+    page_images = valid_images[start:end]
     
     # Create a grid of selectable images
-    st.subheader("Select Images to Relabel")
-    
+    # Quick actions
+    if st.button("Select all in current page"):
+        for img_path in page_images:
+            st.session_state.selected_images.add(img_path.name)
+
+    if st.button("Clear all selections"):
+        st.session_state.selected_images.clear()
+
     # Create columns for the image grid
     cols = st.columns(4)
     
@@ -107,7 +134,7 @@ def app():
         st.session_state.selected_images = set()
     
     # Display images in a grid with checkboxes
-    for idx, img_path in enumerate(valid_images):
+    for idx, img_path in enumerate(page_images):
         with cols[idx % 4]:
             try:
                 image = Image.open(img_path)
@@ -136,6 +163,9 @@ def app():
     )
     
     # Update button
+    # Option to mark QC as review (default on)
+    mark_review = st.checkbox("Mark QC as review", value=True, help="When enabled, saved rows will set set='review'.")
+
     if st.button("Update Labels"):
         if not st.session_state.selected_images:
             st.warning("Please select at least one image")
@@ -148,6 +178,7 @@ def app():
                     'image_id': img_id,
                     'original_label': original_label,
                     'new_label': new_label,
+                    'set': 'review' if mark_review else None,
                     'timestamp': datetime.now().isoformat(),
                     'user': st.session_state.get('username', 'streamlit_user')
                 })
@@ -163,7 +194,40 @@ def app():
             
             # Clear selections
             st.session_state.selected_images.clear()
-            st.experimental_rerun()
+            st.rerun()
+
+    # Recent history and revert (optional)
+    with st.expander("Recent edits"):
+        if latest_annotations.empty:
+            st.info("No annotations yet.")
+        else:
+            # Show last 50 edits
+            show_df = latest_annotations.sort_values("timestamp", ascending=False).head(50)
+            st.dataframe(show_df, use_container_width=True)
+
+            # Simple revert by image_id
+            revert_image = st.selectbox("Revert image", options=[""] + show_df["image_id"].astype(str).tolist())
+            if revert_image:
+                row = show_df.loc[show_df["image_id"].astype(str) == revert_image].iloc[0]
+                # Determine original label to revert to
+                revert_to = row.get("original_label") if pd.notna(row.get("original_label")) else None
+                if not revert_to:
+                    # Fallback to current predictions label
+                    if revert_image in predictions_df['crop_image_id'].astype(str).values:
+                        revert_to = predictions_df.loc[predictions_df['crop_image_id'].astype(str) == revert_image, 'cropmodel_label'].iloc[0]
+                if revert_to:
+                    revert_row = {
+                        'image_id': revert_image,
+                        'original_label': predictions_df.loc[predictions_df['crop_image_id'].astype(str) == revert_image, 'cropmodel_label'].iloc[0] if revert_image in predictions_df['crop_image_id'].astype(str).values else row.get('new_label'),
+                        'new_label': revert_to,
+                        'set': 'review' if mark_review else None,
+                        'timestamp': datetime.now().isoformat(),
+                        'user': st.session_state.get('username', 'streamlit_user')
+                    }
+                    annotations_df = pd.concat([annotations_df, pd.DataFrame([revert_row])], ignore_index=True)
+                    annotations_df.to_csv("app/data/annotations.csv", index=False)
+                    st.success(f"Reverted {revert_image} to {revert_to}")
+                    st.rerun()
 
 if __name__ == "__main__":
     load_css()

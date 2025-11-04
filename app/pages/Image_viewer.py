@@ -4,6 +4,7 @@ from PIL import Image
 from utils.styling import load_css
 import pandas as pd
 from utils.auth import require_login
+from utils.annotations import load_annotations, apply_annotations
 
 
 def app():
@@ -11,6 +12,9 @@ def app():
     st.title("Predictions Viewer")
     # Get experiment data
     image_df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
+    # Apply annotation overrides (label and set)
+    annotations_df = load_annotations("app/data/annotations.csv")
+    image_df = apply_annotations(image_df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
 
     # Convert cropmodel_label to string type
     image_df['cropmodel_label'] = image_df['cropmodel_label'].astype(str)

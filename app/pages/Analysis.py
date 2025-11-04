@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 from pathlib import Path
 from utils.styling import load_css
+from utils.annotations import load_annotations, apply_annotations
 import geopandas as gpd
 from utils.auth import require_login
 
@@ -35,6 +36,9 @@ def app():
     app_data_dir = Path(__file__).parents[1] / "data"
     default_file = app_data_dir / "most_recent_all_flight_predictions.csv"
     df = pd.read_csv(default_file)
+    # Apply annotation overrides to analysis dataset
+    annotations_df = load_annotations("app/data/annotations.csv")
+    df = apply_annotations(df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
     df = df[df["cropmodel_label"].str.count(" ") == 1]
     date_component = df["flight_name"].str.split("_").str[1]
     datetime_values = pd.to_datetime(date_component, format='%Y%m%d', errors='coerce')
