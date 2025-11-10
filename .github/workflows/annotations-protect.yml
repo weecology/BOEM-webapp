@@ -8,6 +8,8 @@ jobs:
   check-annotations:
     name: Fail if annotations.csv changed
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
