@@ -13,6 +13,12 @@ log() {
 
 log "=== Script run initiated ==="
 
+# Setup on weecologydeploy user
+source ~/.weecologybot/githubdeploytoken.txt
+git config user.email "weecologydeploy@weecology.org"
+git config user.name "Weecology Deploy Bot"
+git remote add deploy https://${GITHUBTOKEN}@github.com/weecology/BOEM-webapp.git 2>&1 || echo "Deploy already added"
+
 ###############################################################
 # 1. Update repository (using soft reset to avoid file changes)
 ###############################################################
