@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from utils.styling import load_css
 from utils.auth import require_login
-from utils.annotations import load_annotations, reduce_annotations
+from utils.annotations import load_annotations, reduce_annotations, apply_annotations
 
 def get_all_species(taxonomy_data):
     """Extract all species from the taxonomy data"""
@@ -59,6 +59,10 @@ def app():
 
     # Load the predictions dataframe
     predictions_df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
+    
+    # Apply overrides to predictions table
+    annotations_df = load_annotations("app/data/annotations.csv")
+    predictions_df = apply_annotations(predictions_df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
     
     # Filter by confidence score
     if 'score' in predictions_df.columns:
