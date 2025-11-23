@@ -1,0 +1,41 @@
+name: Protect annotations.csv
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  check-annotations:
+    name: Fail if annotations.csv changed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run annotations check
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          # Fetch base branch so we can diff against it
+          git fetch origin "$PR_BASE_REF"
+
+          # List changed files between the PR base and the current HEAD
+          CHANGED=$(git diff --name-only "origin/$PR_BASE_REF" HEAD || true)
+
+          echo "Changed files in this PR:"
+          printf '%s\n' "$CHANGED"
+
+          # If any path is named annotations.csv anywhere in the tree, fail
+          if printf '%s\n' "$CHANGED" | grep -qE '(^|/)?annotations\.csv$'; then
+            echo "::error::Detected changes to one or more annotations.csv files. These files are centrally maintained and must not be modified in PRs."
+            echo "If you intended to update annotations data, please open an issue or follow the project's data update process."
+            exit 1
+          fi
+
+          echo "OK: No annotations.csv files modified."
