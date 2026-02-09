@@ -6,15 +6,44 @@ from pathlib import Path
 import os
 import shutil
 
+
+def normalize_predictions_scores(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normalize scores to 0-1 scale and add human_labeled column.
+
+    - Adds human_labeled: True when set in train/validation/review, else False
+    - For human_labeled rows (or score > 1): sets score = 1.0
+    """
+    df = df.copy()
+    if 'set' not in df.columns:
+        df['human_labeled'] = False
+        return df
+    df['human_labeled'] = df['set'].isin(['train', 'validation', 'review'])
+    # Normalize scores: human-labeled and any score > 1 become 1.0
+    mask = df['human_labeled'] | (df['score'] > 1)
+    if 'score' in df.columns:
+        df.loc[mask, 'score'] = 1.0
+    return df
+
+
 if __name__ == '__main__':
     # Download newest report
     comet_utils.flight_model_metrics()
     comet_utils.detection_model_metrics()
     comet_utils.classification_model_metrics()
 
-    # Create shapefiles
+    # Normalize scores and add human_labeled
     latest_predictions = pd.read_csv(
         "app/data/most_recent_all_flight_predictions.csv")
+    latest_predictions = normalize_predictions_scores(latest_predictions)
+    latest_predictions.to_csv("app/data/most_recent_all_flight_predictions.csv", index=False)
+
+    # Normalize predictions.csv (full history)
+    predictions_path = Path("app/data/predictions.csv")
+    if predictions_path.exists():
+        predictions_df = pd.read_csv(predictions_path)
+        predictions_df = normalize_predictions_scores(predictions_df)
+        predictions_df.to_csv(predictions_path, index=False)
 
     # Lookup metadata for images
     for flight_name in latest_predictions['flight_name'].unique():

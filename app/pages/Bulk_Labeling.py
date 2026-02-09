@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from utils.styling import load_css
 from utils.auth import require_login
-from utils.annotations import load_annotations, reduce_annotations, apply_annotations
+from utils.annotations import load_annotations, reduce_annotations, apply_annotations, ensure_human_labeled
 
 def get_all_species(taxonomy_data):
     """Extract all species from the taxonomy data"""
@@ -54,7 +54,15 @@ def app():
         min_value=0.0,
         max_value=1.0,
         value=0.6,
-        step=0.01
+        step=0.01,
+        help="Filter by model detection confidence (0-1 scale)"
+    )
+
+    # Human-labeled filter
+    human_labeled_only = st.checkbox(
+        "Human-labeled only",
+        value=False,
+        help="Show only images that have been reviewed by a human"
     )
 
     # Load the predictions dataframe
@@ -63,10 +71,15 @@ def app():
     # Apply overrides to predictions table
     annotations_df = load_annotations("app/data/annotations.csv")
     predictions_df = apply_annotations(predictions_df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
+    predictions_df = ensure_human_labeled(predictions_df, set_col="set")
     
     # Filter by confidence score
     if 'score' in predictions_df.columns:
         predictions_df = predictions_df[predictions_df['score'] >= confidence_threshold]
+    
+    # Filter by human-labeled if requested
+    if human_labeled_only:
+        predictions_df = predictions_df[predictions_df['human_labeled'] == True]
     
     # Load or create annotations dataframe
     annotations_df = load_or_create_annotations()

@@ -4,7 +4,7 @@ from PIL import Image
 from utils.styling import load_css
 import pandas as pd
 from utils.auth import require_login
-from utils.annotations import load_annotations, apply_annotations
+from utils.annotations import load_annotations, apply_annotations, ensure_human_labeled
 
 
 def app():
@@ -16,6 +16,7 @@ def app():
     # Apply annotation overrides (label and set)
     annotations_df = load_annotations("app/data/annotations.csv")
     image_df = apply_annotations(image_df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
+    image_df = ensure_human_labeled(image_df, set_col="set")
 
     # Convert cropmodel_label to string type
     image_df['cropmodel_label'] = image_df['cropmodel_label'].astype(str)
@@ -25,11 +26,12 @@ def app():
                                     min_value=0.0,
                                     max_value=1.0,
                                     value=0.8,
-                                    step=0.01)
+                                    step=0.01,
+                                    help="Filter by model detection confidence (0-1 scale)")
 
-    # Add human-reviewed filter
-    human_reviewed = st.checkbox(
-        "Human-reviewed",
+    # Add human-labeled filter
+    human_labeled_only = st.checkbox(
+        "Human-labeled only",
         value=True,
         help="Show only images that have been reviewed by a human")
 
@@ -37,9 +39,8 @@ def app():
         st.warning("No images found in experiments")
         return
 
-    # Build species list based on current human-reviewed filter
-    filtered_df = image_df[image_df['set'].isin(
-        ['train', 'validation', 'review'])] if human_reviewed else image_df
+    # Build species list based on current human-labeled filter
+    filtered_df = image_df[image_df['human_labeled'] == True] if human_labeled_only else image_df
 
     if filtered_df.empty:
         st.warning("No records match the current filters.")

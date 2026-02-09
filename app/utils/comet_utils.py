@@ -91,9 +91,6 @@ def get_comet_metrics(metric_type='pipeline', output_file=None, metrics_to_track
     # Process predictions if included
     if include_predictions and all_predictions:
         predictions_df = pd.concat(all_predictions)
-        
-        # For human-reviewed rows (train/validation/review), set detection score to 2
-        predictions_df.loc[predictions_df['set'].isin(['train', 'validation', 'review']), 'score'] = 2
         predictions_df.to_csv("app/data/predictions.csv", index=False)
 
         # Get latest predictions
@@ -134,14 +131,21 @@ def flight_model_metrics():
     )
 
 def create_shapefiles(annotations, metadata):
-    """Create shapefiles for each flight_name"""
+    """Create shapefiles for each flight_name.
+    Expects annotations to include human_labeled column (from normalize_predictions_scores).
+    Shapefile column names truncated to 10 chars: human_labeled -> human_lab
+    """
     metadata_df = pd.read_csv(metadata)
     # Get the latest prediction for each flight_name
+    annotations = annotations.copy()
     annotations["unique_image"] = annotations["image_path"].apply(lambda x: os.path.splitext(x)[0]).str.split("_").str.join("_")
 
     # All together as one shapefile
     metadata_df["unique_image"] = metadata_df["unique_image"].apply(lambda x: x.split("\\")[-1])
-    merged_predictions = annotations.merge(metadata_df[["unique_image", "flight_name","date","lat","long"]], on='unique_image')
+    merged_predictions = annotations.merge(metadata_df[["unique_image", "flight_name", "date", "lat", "long"]], on='unique_image')
+    # Rename human_labeled to human_lab for shapefile 10-char column limit
+    if "human_labeled" in merged_predictions.columns:
+        merged_predictions = merged_predictions.rename(columns={"human_labeled": "human_lab"})
     gdf = gpd.GeoDataFrame(merged_predictions, geometry=gpd.points_from_xy(merged_predictions.long, merged_predictions.lat))
     gdf.crs = "EPSG:4326"
     gdf.to_file("app/data/all_predictions.shp", driver='ESRI Shapefile')

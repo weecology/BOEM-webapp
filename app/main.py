@@ -10,7 +10,7 @@ import geopandas as gpd
 import os
 from PIL import Image
 from utils.auth import require_login
-from utils.annotations import load_annotations, apply_annotations, apply_annotations_to_gdf
+from utils.annotations import load_annotations, apply_annotations, apply_annotations_to_gdf, ensure_human_labeled
 
 st.set_page_config(
     page_title="Bureau of Ocean Energy Management - Gulf of America Biodiversity Survey",
@@ -48,9 +48,8 @@ gdf = gpd.read_file(data_path.parent / "all_predictions.shp")
 gdf = apply_annotations_to_gdf(gdf, annotations_df, gdf_image_col="crop_image", gdf_label_col="cropmodel_", gdf_set_col="set")
 gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
 
-st.title("Bureau of Ocean Energy Management - Gulf of America Biodiversity Survey")
-st.text("This application provides tools for visualizing and analyzing biodiversity data collected during aerial surveys of offshore energy development areas. The tool uses AI to detect and classify marine wildlife species in aerial images. These data are used to inform the development of offshore projects using rapid and cost-effective airborne surveys.")
-
+st.title("Bureau of Ocean Energy Management Biodiversity Survey")
+st.text("Use this tool to visualize biodiversity data collected during aerial surveys of offshore energy development areas. The tool uses AI to detect and classify marine wildlife species in aerial images. These data are used to inform the development of offshore projects using rapid and cost-effective airborne surveys.")
 
 # Show the conceptual figure from app/data/conceptual_figure.png
 conceptual_figure = Image.open("app/www/conceptual_figure.png")
@@ -79,50 +78,72 @@ with col2:
     # Statistics have a min score of 0.7
     st.subheader("Progress")
     st.write(f"Total Observations: {len(df)}")
-    st.write(f"Human-reviewed observations: {df[df['set'].isin(['train', 'validation', 'review'])].shape[0]}")
+    df_labeled = ensure_human_labeled(df, "set")
+    st.write(
+        f"Human-reviewed observations: {df_labeled['human_labeled'].sum()}")
     st.write(f"Species: {df['cropmodel_label'].nunique()}")
     st.write(f"Aerial Surveys: {df['flight_name'].nunique()}")
 
-    # Add detection backbone model metrics
-    try:
-        detection_metrics_df = pd.read_csv("app/data/detection_model_metrics.csv")
-        if not detection_metrics_df.empty:
-            latest_metrics = detection_metrics_df.sort_values('timestamp').groupby('metricName').last()
-            st.subheader("Detection Model")
-            if 'box_recall' in latest_metrics.index:
-                st.write(f"Box Recall: {latest_metrics.loc['box_recall', 'metricValue']:.3f}")
-            if 'box_precision' in latest_metrics.index:
-                st.write(f"Box Precision: {latest_metrics.loc['box_precision', 'metricValue']:.3f}")
-            if 'empty-frame-precision' in latest_metrics.index:
-                st.write(f"Empty Frame Precision: {latest_metrics.loc['empty-frame-precision', 'metricValue']:.3f}")
-            if 'empty_frame_accuracy' in latest_metrics.index:
-                st.write(f"Empty Frame Accuracy: {latest_metrics.loc['empty_frame_accuracy', 'metricValue']:.3f}")
-    except:
-        pass
+# Add detection backbone model metrics
+try:
+    st.subheader("Performance") 
+    st.write(
+        "To evaluate the performance of this workflow, we track the performance using images not use to train the models. A model's recall is the proportion of true biodiversity objects detected by the model. A model precision is the proportion of predictions that are true biodiversity objects."
+    )
+    detection_metrics_df = pd.read_csv(
+        "app/data/detection_model_metrics.csv")
+    if not detection_metrics_df.empty:
+        latest_metrics = detection_metrics_df.sort_values(
+            'timestamp').groupby('metricName').last()
+        st.subheader("Detection Model")
+        if 'box_recall' in latest_metrics.index:
+            st.write(
+                f"Recall: {latest_metrics.loc['box_recall', 'metricValue'] * 100:.1f}%"
+            )
+        if 'box_precision' in latest_metrics.index:
+            st.write(
+                f"Precision: {latest_metrics.loc['box_precision', 'metricValue'] * 100:.1f}%"
+            )
+        if 'empty-frame-precision' in latest_metrics.index:
+            st.write(
+                f"Empty Frame Precision: {latest_metrics.loc['empty-frame-precision', 'metricValue'] * 100:.1f}%"
+            )
+        if 'empty_frame_accuracy' in latest_metrics.index:
+            st.write(
+                f"Empty Frame Accuracy: {latest_metrics.loc['empty_frame_accuracy', 'metricValue'] * 100:.1f}%"
+            )
+except:
+    pass
 
-    # Add classification backbone model metrics
-    try:
-        classification_metrics_df = pd.read_csv("app/data/classification_model_metrics.csv")
-        if not classification_metrics_df.empty:
-            # Get the most recent metrics for each requested metric
-            latest_metrics = classification_metrics_df.sort_values('timestamp').groupby('metricName').last()
-            st.subheader("Classification Model")
-            if 'Accuracy' in latest_metrics.index:
-                st.write(f"Accuracy: {latest_metrics.loc['Accuracy', 'metricValue']:.3f}")
-            if 'Precision' in latest_metrics.index:
-                st.write(f"Precision: {latest_metrics.loc['Precision', 'metricValue']:.3f}")
-            # Add HTML link to the latest classification experiment's Confusion Matrix on Comet
-            try:
-                latest_experiment = classification_metrics_df.sort_values('timestamp').iloc[-1]['experiment']
-                comet_confusion_url = f"https://www.comet.com/bw4sz/boem/{latest_experiment}?experiment-tab=confusionMatrix"
-                st.markdown(
-                    f'<a href="{comet_confusion_url}" target="_blank">View Classification Confusion Matrix</a>',
-                    unsafe_allow_html=True
-                )
-            except Exception:
-                pass
-    except:
-        pass
+# Add classification backbone model metrics
+try:
+    classification_metrics_df = pd.read_csv(
+        "app/data/classification_model_metrics.csv")
+    if not classification_metrics_df.empty:
+        # Get the most recent metrics for each requested metric
+        latest_metrics = classification_metrics_df.sort_values(
+            'timestamp').groupby('metricName').last()
+        st.subheader("Classification Model")
+        if 'Accuracy' in latest_metrics.index:
+            st.write(
+                f"Accuracy: {latest_metrics.loc['Accuracy', 'metricValue']:.3f}"
+            )
+        if 'Precision' in latest_metrics.index:
+            st.write(
+                f"Precision: {latest_metrics.loc['Precision', 'metricValue']:.3f}"
+            )
+        # Add HTML link to the latest classification experiment's Confusion Matrix on Comet
+        try:
+            latest_experiment = classification_metrics_df.sort_values(
+                'timestamp').iloc[-1]['experiment']
+            comet_confusion_url = f"https://www.comet.com/bw4sz/boem/{latest_experiment}?experiment-tab=confusionMatrix"
+            st.markdown(
+                f'<a href="{comet_confusion_url}" target="_blank">View Classification Confusion Matrix</a>',
+                unsafe_allow_html=True)
+        except Exception:
+            pass
+except:
+    pass
 
 st.header("Observations")
 
@@ -146,15 +167,18 @@ default_file = app_data_dir / "all_predictions.shp"
 if default_file.exists():
     gdf_obs = gpd.read_file(default_file)
     gdf_obs = gdf_obs[gdf_obs['cropmodel_'].notna()]
+    annotations_df = load_annotations("app/data/annotations.csv")
+    gdf_obs = apply_annotations_to_gdf(gdf_obs, annotations_df, gdf_image_col="crop_image", gdf_label_col="cropmodel_", gdf_set_col="set")
+    gdf_obs = ensure_human_labeled(gdf_obs, set_col="set")
     predictions_df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
     unique_labels = sorted(gdf_obs['cropmodel_'].unique())
     score_threshold = st.slider(
         "Detection Confidence",
         min_value=0.0,
-        max_value=2.0,
-        value=0.6,
+        max_value=1.0,
+        value=0.75,
         step=0.05,
-        help="Filter observations by detection confidence"
+        help="Filter observations by detection confidence (0-1 scale)"
     )
     selected_labels = st.multiselect(
         "Species",
@@ -163,9 +187,9 @@ if default_file.exists():
         help="Select species to display"
     )
     human_reviewed = st.checkbox(
-        "Only Human-reviewed images",
+        "Only Human-labeled images",
         value=True,
-        help="If checked, only images in the 'train', 'validation', or 'review' sets will be shown."
+        help="If checked, only images that have been reviewed by a human will be shown."
     )
     m.add_basemap("OpenStreetMap")
     m.add_wms_layer(
@@ -182,7 +206,7 @@ if default_file.exists():
             (gdf_obs['cropmodel_'].isin(selected_labels))
         ]
         if human_reviewed:
-            filtered_gdf = filtered_gdf[filtered_gdf['set'].isin(['train', 'validation', 'review'])]
+            filtered_gdf = filtered_gdf[filtered_gdf['human_labeled'] == True]
         if len(filtered_gdf) == 0:
             st.warning("No observations meet the selected filters")
         else:

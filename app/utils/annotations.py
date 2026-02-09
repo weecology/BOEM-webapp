@@ -95,6 +95,21 @@ def apply_annotations(
     return merged
 
 
+def ensure_human_labeled(df: pd.DataFrame, set_col: str = "set") -> pd.DataFrame:
+    """Compute human_labeled from set column (call after apply_annotations).
+    human_labeled is True when set is train, validation, or review.
+    """
+    if df is None or len(df) == 0:
+        return df
+    if set_col not in df.columns:
+        df = df.copy()
+        df["human_labeled"] = False
+        return df
+    df = df.copy()
+    df["human_labeled"] = df[set_col].isin(["train", "validation", "review"])
+    return df
+
+
 def apply_annotations_to_gdf(
     gdf: "pd.DataFrame",
     annotations_df: pd.DataFrame,

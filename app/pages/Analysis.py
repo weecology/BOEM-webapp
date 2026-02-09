@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 from pathlib import Path
 from utils.styling import load_css
-from utils.annotations import load_annotations, apply_annotations
+from utils.annotations import load_annotations, apply_annotations, ensure_human_labeled
 import geopandas as gpd
 from utils.auth import require_login
 
@@ -40,6 +40,7 @@ def app():
     # Apply annotation overrides to analysis dataset
     annotations_df = load_annotations("app/data/annotations.csv")
     df = apply_annotations(df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
+    df = ensure_human_labeled(df, set_col="set")
     df = df[df["cropmodel_label"].str.count(" ") == 1]
     date_component = df["flight_name"].str.split("_").str[1]
     datetime_values = pd.to_datetime(date_component, format='%Y%m%d', errors='coerce')
@@ -76,7 +77,7 @@ def app():
         st.info('No species data available.')
 
     st.subheader("Reviewed Observations")
-    reviewed_species_counts = df[df['set'].isin(['train', 'validation', "review"] )]['cropmodel_label'].value_counts()
+    reviewed_species_counts = df[df['human_labeled'] == True]['cropmodel_label'].value_counts()
     if not reviewed_species_counts.empty:
         reviewed_counts = reviewed_species_counts.reset_index()
         reviewed_counts.columns = ['label', 'count']

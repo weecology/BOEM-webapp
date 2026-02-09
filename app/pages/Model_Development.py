@@ -2,6 +2,7 @@ import streamlit as st
 from utils.styling import load_css
 import pandas as pd
 import plotly.express as px
+from utils.annotations import load_annotations, apply_annotations, ensure_human_labeled
 
 def create_metric_plots(metrics_df):
     """Create plots showing metric improvement over time"""
@@ -205,19 +206,31 @@ def app():
     st.header("Species Composition Analysis")
     st.text("The species composition analysis shows how the predictions of species change over time during model development and annotation. This addresses the question of whether additional iterations of model development will lead to changes in downstream data.")
     predictions_df = pd.read_csv("app/data/predictions.csv")
+    annotations_df = load_annotations("app/data/annotations.csv")
+    predictions_df = apply_annotations(predictions_df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
+    predictions_df = ensure_human_labeled(predictions_df, set_col="set")
     
     detection_threshold = st.slider(
         "Detection Confidence Threshold",
         min_value=0.0,
         max_value=1.0,
         value=0.6,
-        step=0.01
+        step=0.01,
+        help="Filter by model detection confidence (0-1 scale)"
+    )
+    
+    human_labeled_only = st.checkbox(
+        "Human-labeled only (Species Comp)",
+        value=False,
+        help="Show only predictions that have been reviewed by a human"
     )
     
     flight_name = st.selectbox("Select Flight Name (Species Comp)", predictions_df["flight_name"].unique())
     filtered_df = predictions_df[predictions_df["flight_name"] == flight_name]
     if 'score' in filtered_df.columns:
         filtered_df = filtered_df[filtered_df['score'] >= detection_threshold]
+    if human_labeled_only:
+        filtered_df = filtered_df[filtered_df['human_labeled'] == True]
     
     # Create and display raw count plot
     def create_prediction_plots(predictions_df):
