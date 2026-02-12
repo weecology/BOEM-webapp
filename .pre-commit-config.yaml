@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: prevent-annotations-change
+        name: Prevent changes to annotations.csv
+        entry: bash -c 'if git diff --cached --name-only | grep -qE "(^|/)?annotations\.csv$"; then echo "ERROR: staging changes to annotations.csv is not allowed."; git diff --cached --name-only | grep -E "(^|/)?annotations\.csv$"; exit 1; fi'
+        language: system
+        stages: [commit]
