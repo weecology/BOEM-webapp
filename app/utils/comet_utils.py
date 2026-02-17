@@ -10,7 +10,11 @@ import zipfile
 # Load environment variables
 load_dotenv()
 
-def get_comet_metrics(metric_type='pipeline', output_file=None, metrics_to_track=None, include_predictions=False):
+
+def get_comet_metrics(metric_type='pipeline',
+                      output_file=None,
+                      metrics_to_track=None,
+                      include_predictions=False):
     """
     Get metrics from Comet.ml experiments
     
@@ -25,59 +29,71 @@ def get_comet_metrics(metric_type='pipeline', output_file=None, metrics_to_track
     """
     api = API(api_key=os.getenv('COMET_API_KEY'))
     workspace = os.getenv('COMET_WORKSPACE')
-    
+
     # Get all experiments from the BOEM project
     experiments = api.get(f"{workspace}/boem")
-    
+
     metrics_data = []
     all_predictions = []
-    
+
     for exp in experiments:
         # Filter by tags
         tags = exp.get_tags()
         if metric_type not in tags:
             continue
-            
+
         # Skip archived or running experiments
         if exp.archived or exp.get_state() == 'running':
             continue
-            
+
         # Skip incomplete pipeline experiments
         if metric_type == 'pipeline' and 'complete' not in tags:
             continue
-            
+
         # Skip preliminary flight
         if metric_type == 'pipeline':
-            flight_name = exp.get_parameters_summary("flight_name")["valueCurrent"]
+            try: 
+                flight_name = exp.get_parameters_summary(
+                    "flight_name")["valueCurrent"]
+            except:
+                flight_name = None
             if flight_name == "JPG_2024_Jan27":
                 continue
 
         # Get metrics
         metrics = exp.get_metrics()
         metrics_df = pd.DataFrame(metrics)
-        
+
         if metrics_to_track:
-            metrics_df = metrics_df[metrics_df["metricName"].isin(metrics_to_track)]
-            
+            metrics_df = metrics_df[metrics_df["metricName"].isin(
+                metrics_to_track)]
+
         if not metrics_df.empty:
             # Get latest value for each metric
-            metrics_df = metrics_df.sort_values(by='timestamp', ascending=False).groupby('metricName').first().reset_index()
-            metrics_df['timestamp'] = pd.to_datetime(metrics_df['timestamp'], unit='ms')
+            metrics_df = metrics_df.sort_values(
+                by='timestamp',
+                ascending=False).groupby('metricName').first().reset_index()
+            metrics_df['timestamp'] = pd.to_datetime(metrics_df['timestamp'],
+                                                     unit='ms')
             metrics_df['experiment'] = exp.name
             try:
-                metrics_df["flight_name"] = exp.get_parameters_summary("flight_name")["valueCurrent"]
+                metrics_df["flight_name"] = exp.get_parameters_summary(
+                    "flight_name")["valueCurrent"]
             except:
                 pass
             metrics_data.append(metrics_df)
-            
+
         # Process predictions if requested
         if include_predictions:
             try:
-                final_predictions = exp.get_asset_by_name('final_predictions.csv', asset_type='dataframe')
+                final_predictions = exp.get_asset_by_name(
+                    'final_predictions.csv', asset_type='dataframe')
                 final_predictions = pd.read_csv(io.BytesIO(final_predictions))
-                final_predictions["flight_name"] = exp.get_parameters_summary("flight_name")["valueCurrent"]
+                final_predictions["flight_name"] = exp.get_parameters_summary(
+                    "flight_name")["valueCurrent"]
                 final_predictions["experiment"] = exp.name
-                final_predictions["timestamp"] = pd.to_datetime(exp.start_server_timestamp, unit='ms')
+                final_predictions["timestamp"] = pd.to_datetime(
+                    exp.start_server_timestamp, unit='ms')
                 all_predictions.append(final_predictions)
             except:
                 pass
@@ -87,7 +103,7 @@ def get_comet_metrics(metric_type='pipeline', output_file=None, metrics_to_track
         metrics_df = pd.concat(metrics_data)
         if output_file:
             metrics_df.to_csv(output_file, index=False)
-    
+
     # Process predictions if included
     if include_predictions and all_predictions:
         predictions_df = pd.concat(all_predictions)
@@ -95,14 +111,17 @@ def get_comet_metrics(metric_type='pipeline', output_file=None, metrics_to_track
 
         # Get latest predictions
         # Get the latest date for each flight_name
-        latest_dates = predictions_df.groupby('flight_name')['timestamp'].max().reset_index()
+        latest_dates = predictions_df.groupby(
+            'flight_name')['timestamp'].max().reset_index()
 
         # Merge to get all predictions from the latest date for each flight_name
-        latest_predictions = predictions_df.merge(latest_dates, on=['flight_name', 'timestamp'])
-        
-        latest_predictions.to_csv("app/data/most_recent_all_flight_predictions.csv", index=False)
+        latest_predictions = predictions_df.merge(
+            latest_dates, on=['flight_name', 'timestamp'])
+
+        latest_predictions.to_csv(
+            "app/data/most_recent_all_flight_predictions.csv", index=False)
         return metrics_df, predictions_df
-    
+
     return metrics_df
 
 def detection_model_metrics():
@@ -178,4 +197,3 @@ def download_images(experiment_name, save_dir='app/data/images'):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(save_dir)
     zip_path.unlink()  # Remove the zip file after extraction
-
