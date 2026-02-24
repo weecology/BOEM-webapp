@@ -133,11 +133,11 @@ def detection_model_metrics():
     )
 
 def classification_model_metrics():
-    """Get the metrics for the classification model"""
+    """Get the metrics for the classification model (overall + per-species, e.g. Class Accuracy_Alle alle)."""
     return get_comet_metrics(
         metric_type='classification',
         output_file="app/data/classification_model_metrics.csv",
-        metrics_to_track=["Accuracy"]
+        metrics_to_track=None,  # fetch all metrics so species metrics like "Class Accuracy_Alle alle" are included
     )
 
 def flight_model_metrics():

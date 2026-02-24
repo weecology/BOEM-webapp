@@ -5,22 +5,22 @@ import plotly.express as px
 from utils.annotations import load_annotations, apply_annotations, ensure_human_labeled
 
 def create_metric_plots(metrics_df):
-    """Create plots showing metric improvement over time"""
-    # Line plot for each metric over time
-    fig_metrics = px.line(
-        metrics_df,
-        x='timestamp',
-        y='metricValue',
-        facet_col='metricName',
-        title='Metrics Over Time'
+    """Create plots showing metric over time (points only)."""
+    df = metrics_df.copy()
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    fig_metrics = px.scatter(
+        df,
+        x="timestamp",
+        y="metricValue",
+        facet_col="metricName",
+        title="Metrics Over Time",
     )
-    
+    fig_metrics.update_traces(marker=dict(size=10))
     fig_metrics.update_layout(
         height=400,
         margin=dict(l=20, r=20, t=40, b=20),
-        showlegend=False
+        showlegend=False,
     )
-    
     return fig_metrics
 
 def create_comet_links(experiment_id):
@@ -50,17 +50,22 @@ def app():
     # --- Detection Model Metrics Section ---
     try:
         detection_metrics_df = pd.read_csv("app/data/detection_model_metrics.csv")
+        # Exclude 0.0 values from aborted runs so y-axis scales to real data
+        detection_metrics_df = detection_metrics_df[detection_metrics_df["metricValue"] != 0]
         st.subheader("Detection Model Metrics Over Time")
         # Plot detection metrics
         if not detection_metrics_df.empty:
-            fig_detection = px.line(
+            detection_metrics_df = detection_metrics_df.copy()
+            detection_metrics_df["timestamp"] = pd.to_datetime(detection_metrics_df["timestamp"])
+            fig_detection = px.scatter(
                 detection_metrics_df,
                 x='timestamp',
                 y='metricValue',
                 color='metricName',
                 title='Detection Model Metrics Over Time',
-                labels={'timestamp': 'Timestamp', 'metricValue': 'Metric Value', 'metricName': 'Metric'}
+                labels={'timestamp': 'Timestamp', 'metricValue': 'Metric Value', 'metricName': 'Metric'},
             )
+            fig_detection.update_traces(marker=dict(size=10))
             fig_detection.update_layout(
                 height=400,
                 margin=dict(l=20, r=20, t=40, b=20),
@@ -84,33 +89,63 @@ def app():
     # --- Classification Model Metrics Section ---
     try:
         classification_metrics_df = pd.read_csv("app/data/classification_model_metrics.csv")
+        # Exclude 0.0 values from aborted runs so y-axis scales to real data
+        classification_metrics_df = classification_metrics_df[classification_metrics_df["metricValue"] != 0]
         st.subheader("Classification Model Metrics Over Time")
-        # Plot classification metrics
-        if not classification_metrics_df.empty:
-            fig_classification = px.line(
-                classification_metrics_df,
+        # Only Micro-averaged accuracy in the main figure
+        micro_accuracy_df = classification_metrics_df[
+            classification_metrics_df["metricName"] == "Micro-Average Accuracy"
+        ]
+        if not micro_accuracy_df.empty:
+            micro_accuracy_df = micro_accuracy_df.copy()
+            micro_accuracy_df["timestamp"] = pd.to_datetime(micro_accuracy_df["timestamp"])
+            fig_classification = px.scatter(
+                micro_accuracy_df,
                 x='timestamp',
                 y='metricValue',
-                color='metricName',
                 title='Classification Model Metrics Over Time',
-                labels={'timestamp': 'Timestamp', 'metricValue': 'Metric Value', 'metricName': 'Metric'}
+                labels={'timestamp': 'Timestamp', 'metricValue': 'Metric Value'},
             )
+            fig_classification.update_traces(marker=dict(size=10))
             fig_classification.update_layout(
                 height=400,
                 margin=dict(l=20, r=20, t=40, b=20),
-                legend=dict(
-                    yanchor="top",
-                    y=0.99,
-                    xanchor="left",
-                    x=1.02
-                )
+                showlegend=False,
             )
             st.plotly_chart(fig_classification, use_container_width=True)
-            # Show table
-            with st.expander("View Classification Model Metrics Data"):
-                st.dataframe(classification_metrics_df)
         else:
-            st.info("No classification model metrics available.")
+            st.info("No Micro-Average Accuracy data available.")
+        # Species / per-class metric: dropdown to pick any metric and plot over time
+        st.subheader("Species or per-class classification metric")
+        all_metric_names = sorted(classification_metrics_df["metricName"].unique().tolist())
+        if all_metric_names:
+            selected_metric = st.selectbox(
+                "Select metric to plot over time",
+                options=all_metric_names,
+                key="classification_metric_select",
+                help="e.g. Class Accuracy_Alle alle for per-species accuracy over time",
+            )
+            metric_series = classification_metrics_df[
+                classification_metrics_df["metricName"] == selected_metric
+            ].sort_values("timestamp")
+            if not metric_series.empty:
+                metric_series = metric_series.copy()
+                metric_series["timestamp"] = pd.to_datetime(metric_series["timestamp"])
+                fig_species = px.scatter(
+                    metric_series,
+                    x="timestamp",
+                    y="metricValue",
+                    title=f"{selected_metric} over time",
+                    labels={"timestamp": "Timestamp", "metricValue": "Metric Value"},
+                )
+                fig_species.update_traces(marker=dict(size=10))
+                fig_species.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20))
+                st.plotly_chart(fig_species, use_container_width=True)
+            else:
+                st.info(f"No data for {selected_metric}.")
+        # Show table for all classification metrics
+        with st.expander("View Classification Model Metrics Data"):
+            st.dataframe(classification_metrics_df)
     except Exception as e:
         st.warning(f"Could not load classification model metrics: {e}")
 
@@ -118,6 +153,8 @@ def app():
     st.header("Latest Flight Metrics")
     try:
         metrics_df = pd.read_csv("app/data/metrics.csv")
+        # Exclude 0.0 values from aborted runs so y-axis scales to real data
+        metrics_df = metrics_df[metrics_df["metricValue"] != 0]
         if not metrics_df.empty:
             # Get the latest metrics for each flight and metric
             latest_metrics = metrics_df.sort_values('timestamp').groupby(['flight_name', 'metricName']).last().reset_index()
@@ -168,6 +205,8 @@ def app():
 
     # Filter metrics and predictions for selected flight name
     metrics_df = metrics_df[metrics_df["flight_name"] == flight_name]
+    # Exclude 0.0 values from aborted runs so y-axis scales to real data
+    metrics_df = metrics_df[metrics_df["metricValue"] != 0]
 
     # Create and display metrics plot
     st.subheader("Training Metrics")
@@ -236,9 +275,10 @@ def app():
     def create_prediction_plots(predictions_df):
         if predictions_df is None:
             return None
+        predictions_df = predictions_df.copy()
         predictions_df['timestamp'] = pd.to_datetime(predictions_df['timestamp'])
         raw_counts = predictions_df.groupby(['timestamp', 'cropmodel_label']).size().reset_index(name='count')
-        fig_raw = px.line(
+        fig_raw = px.scatter(
             raw_counts,
             x='timestamp',
             y='count',
@@ -248,8 +288,9 @@ def app():
                 'timestamp': 'Date',
                 'count': 'Number of Detections',
                 'cropmodel_label': 'Species'
-            }
+            },
         )
+        fig_raw.update_traces(marker=dict(size=10))
         fig_raw.update_layout(
             height=600,
             xaxis_tickangle=-45,
