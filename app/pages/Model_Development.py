@@ -3,6 +3,12 @@ from utils.styling import load_css
 import pandas as pd
 import plotly.express as px
 from utils.annotations import load_annotations, apply_annotations, ensure_human_labeled
+from utils.indices import load_predictions_indices
+
+
+@st.cache_data
+def _load_indices():
+    return load_predictions_indices()
 
 def create_metric_plots(metrics_df):
     """Create plots showing metric over time (points only)."""
@@ -248,7 +254,7 @@ def app():
     annotations_df = load_annotations("app/data/annotations.csv")
     predictions_df = apply_annotations(predictions_df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
     predictions_df = ensure_human_labeled(predictions_df, set_col="set")
-    
+
     detection_threshold = st.slider(
         "Detection Confidence Threshold",
         min_value=0.0,
@@ -257,14 +263,14 @@ def app():
         step=0.01,
         help="Filter by model detection confidence (0-1 scale)"
     )
-    
     human_labeled_only = st.checkbox(
         "Human-labeled only (Species Comp)",
         value=False,
         help="Show only predictions that have been reviewed by a human"
     )
-    
-    flight_name = st.selectbox("Select Flight Name (Species Comp)", predictions_df["flight_name"].unique())
+    indices = _load_indices()
+    flight_options = indices["flight_list"] if indices else sorted(predictions_df["flight_name"].unique().tolist())
+    flight_name = st.selectbox("Select Flight Name (Species Comp)", flight_options)
     filtered_df = predictions_df[predictions_df["flight_name"] == flight_name]
     if 'score' in filtered_df.columns:
         filtered_df = filtered_df[filtered_df['score'] >= detection_threshold]

@@ -16,10 +16,11 @@ gatherUsageStats = false
 serverAddress = "0.0.0.0"  # Changed from localhost
 
 [theme]
-primaryColor = "#0066cc"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f0f2f6"
-textColor = "#262730"
+primaryColor = "#1b3a57"
+backgroundColor = "#f8f9fa"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#1a1a1a"
+font = "sans serif"
 
 [runner]
 memory_limit = "4096mb"

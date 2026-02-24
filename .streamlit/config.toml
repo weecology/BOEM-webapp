@@ -1,2 +1,10 @@
 [ui]
-hide_sidebar_nav = true 
+hide_sidebar_nav = true
+
+# Scientific / agency theme: credible, readable, restrained
+[theme]
+primaryColor = "#1b3a57"
+backgroundColor = "#f8f9fa"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#1a1a1a"
+font = "sans serif"

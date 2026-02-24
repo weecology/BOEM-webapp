@@ -11,6 +11,8 @@ import os
 from PIL import Image
 from utils.auth import require_login
 from utils.annotations import load_annotations, apply_annotations, apply_annotations_to_gdf, ensure_human_labeled
+from utils.indices import load_predictions_indices, EFFECTIVE_PREDICTIONS_PATH
+from utils.styling import inject_landing_css
 
 st.set_page_config(
     page_title="Bureau of Ocean Energy Management - Gulf of America Biodiversity Survey",
@@ -20,136 +22,137 @@ st.set_page_config(
 
 # Require login for all content
 require_login()
-
-# Read the data
-data_path = Path(__file__).parent / "data" / "most_recent_all_flight_predictions.csv"
-
-if not data_path.exists():
-    st.error(f"File not found: {data_path}")
-    st.stop()
+inject_landing_css()
 
 # Add the app directory to Python path
 app_dir = Path(__file__).parent
 if str(app_dir) not in sys.path:
     sys.path.append(str(app_dir))
 
-df = pd.read_csv(data_path)
+data_path = Path(__file__).parent / "data" / "most_recent_all_flight_predictions.csv"
+if not data_path.exists():
+    st.error(f"File not found: {data_path}")
+    st.stop()
 
-# Apply overrides to predictions table
-annotations_df = load_annotations("app/data/annotations.csv")
-df = apply_annotations(df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
 
-df = df.loc[df.score>0.7]
+@st.cache_data
+def _load_effective_predictions():
+    if Path(EFFECTIVE_PREDICTIONS_PATH).exists():
+        return pd.read_csv(EFFECTIVE_PREDICTIONS_PATH)
+    return None
 
-# Only keep two word labels
+
+@st.cache_data
+def _load_predictions_with_annotations():
+    df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
+    ann = load_annotations("app/data/annotations.csv")
+    df = apply_annotations(df, ann, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
+    return ensure_human_labeled(df, set_col="set")
+
+
+@st.cache_data
+def _load_indices():
+    return load_predictions_indices()
+
+
+# Read the data (prefer effective CSV when available)
+_effective = _load_effective_predictions()
+if _effective is not None:
+    df = _effective.copy()
+else:
+    df = _load_predictions_with_annotations().copy()
+
+df = df.loc[df.score > 0.7]
 df = df[df["cropmodel_label"].str.count(" ") == 1]
+
+annotations_df = load_annotations("app/data/annotations.csv")
 gdf = gpd.read_file(data_path.parent / "all_predictions.shp")
-# Apply overrides to geodataframe (join on crop_image)
 gdf = apply_annotations_to_gdf(gdf, annotations_df, gdf_image_col="crop_image", gdf_label_col="cropmodel_", gdf_set_col="set")
 gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
 
 st.title("Bureau of Ocean Energy Management Biodiversity Survey")
-st.text("Use this tool to visualize biodiversity data collected during aerial surveys of offshore energy development areas. The tool uses AI to detect and classify marine wildlife species in aerial images. These data are used to inform the development of offshore projects using rapid and cost-effective airborne surveys.")
+st.markdown("*Visualize biodiversity from aerial surveys of offshore energy areas—AI-assisted detection and classification of marine wildlife to support environmental assessment.*")
+with st.expander("About this tool"):
+    st.markdown("Use this tool to explore biodiversity data from airborne surveys. The pipeline detects and classifies marine species in aerial imagery; outputs inform offshore project development with rapid, cost-effective monitoring. The viewer provides interactive maps, species analysis, and image galleries of detections.")
 
-# Show the conceptual figure from app/data/conceptual_figure.png
-conceptual_figure = Image.open("app/www/conceptual_figure.png")
-st.image(conceptual_figure, caption="Raw image from a flight with detections and classifications overlaid for bottlenose dolphins", width=700, use_container_width='always')
+# Conceptual figure (hero): highlight workflow
+_conceptual_path = app_dir / "www" / "conceptual_figure.png"
+if not _conceptual_path.exists():
+    _conceptual_path = Path("app/www/conceptual_figure.png")
+if _conceptual_path.exists():
+    conceptual_figure = Image.open(_conceptual_path)
+    st.image(conceptual_figure, caption="**Figure 1.** Raw flight image with detections and classifications overlaid (e.g. bottlenose dolphins).", use_container_width=True)
 
 col1, col2 = st.columns(2)
 
 with col1:
+    st.markdown("### Overview")
     st.markdown("""
-        ### Overview
-        
-        This project processes aerial survey data to:
-        - Detect and classify marine wildlife species
-        - Generate distribution maps and abundance estimates
-        - Analyze temporal and spatial patterns
-        - Support environmental impact assessments
-
-        The data viewer includes:
-        - Interactive maps for viewing survey tracks and observations
-        - Analysis tools for exploring species distributions
-        - Image galleries of detected species
-    """)
+- **Processing:** Detect and classify marine wildlife; generate distribution maps and abundance estimates; analyze temporal and spatial patterns.
+- **Viewer:** Interactive maps (survey tracks and observations), species analysis, and image galleries of detections.
+""")
 
 with col2:
-    # Display basic statistics
-    # Statistics have a min score of 0.7
-    st.subheader("Progress")
-    st.write(f"Total Observations: {len(df)}")
+    st.markdown("### Progress")
     df_labeled = ensure_human_labeled(df, "set")
-    st.write(
-        f"Human-reviewed observations: {df_labeled['human_labeled'].sum()}")
-    st.write(f"Species: {df['cropmodel_label'].nunique()}")
-    st.write(f"Aerial Surveys: {df['flight_name'].nunique()}")
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.metric("Observations", f"{len(df):,}")
+    with m2:
+        st.metric("Human-reviewed", f"{df_labeled['human_labeled'].sum():,}")
+    with m3:
+        st.metric("Species", df["cropmodel_label"].nunique())
+    st.caption(f"Aerial surveys: {df['flight_name'].nunique()}")
 
-# Add detection backbone model metrics
+# Model performance (held-out evaluation data)
+st.markdown("### Model performance")
+st.caption("Metrics on images not used for training. Recall = proportion of true objects detected; precision = proportion of predictions that are correct.")
+det_loaded, cls_loaded = False, False
 try:
-    st.subheader("Performance") 
-    st.write(
-        "To evaluate the performance of this workflow, we track the performance using images not use to train the models. A model's recall is the proportion of true biodiversity objects detected by the model. A model precision is the proportion of predictions that are true biodiversity objects."
-    )
-    detection_metrics_df = pd.read_csv(
-        "app/data/detection_model_metrics.csv")
-    if not detection_metrics_df.empty:
-        latest_metrics = detection_metrics_df.sort_values(
-            'timestamp').groupby('metricName').last()
-        st.subheader("Detection Model")
-        if 'box_recall' in latest_metrics.index:
-            st.write(
-                f"Recall: {latest_metrics.loc['box_recall', 'metricValue'] * 100:.1f}%"
-            )
-        if 'box_precision' in latest_metrics.index:
-            st.write(
-                f"Precision: {latest_metrics.loc['box_precision', 'metricValue'] * 100:.1f}%"
-            )
-        if 'empty-frame-precision' in latest_metrics.index:
-            st.write(
-                f"Empty Frame Precision: {latest_metrics.loc['empty-frame-precision', 'metricValue'] * 100:.1f}%"
-            )
-        if 'empty_frame_accuracy' in latest_metrics.index:
-            st.write(
-                f"Empty Frame Accuracy: {latest_metrics.loc['empty_frame_accuracy', 'metricValue'] * 100:.1f}%"
-            )
-except:
+    detection_metrics_df = pd.read_csv("app/data/detection_model_metrics.csv")
+    det_loaded = not detection_metrics_df.empty
+except Exception:
     pass
-
-# Add classification backbone model metrics
 try:
-    classification_metrics_df = pd.read_csv(
-        "app/data/classification_model_metrics.csv")
-    if not classification_metrics_df.empty:
-        # Get the most recent metrics for each requested metric
-        latest_metrics = classification_metrics_df.sort_values(
-            'timestamp').groupby('metricName').last()
-        st.subheader("Classification Model")
-        if 'Accuracy' in latest_metrics.index:
-            st.write(
-                f"Accuracy: {latest_metrics.loc['Accuracy', 'metricValue']:.3f}"
-            )
-        if 'Precision' in latest_metrics.index:
-            st.write(
-                f"Precision: {latest_metrics.loc['Precision', 'metricValue']:.3f}"
-            )
-        # Add HTML link to the latest classification experiment's Confusion Matrix on Comet
-        try:
-            latest_experiment = classification_metrics_df.sort_values(
-                'timestamp').iloc[-1]['experiment']
-            comet_confusion_url = f"https://www.comet.com/bw4sz/boem/{latest_experiment}?experiment-tab=confusionMatrix"
-            st.markdown(
-                f'<a href="{comet_confusion_url}" target="_blank">View Classification Confusion Matrix</a>',
-                unsafe_allow_html=True)
-        except Exception:
-            pass
-except:
+    classification_metrics_df = pd.read_csv("app/data/classification_model_metrics.csv")
+    cls_loaded = not classification_metrics_df.empty
+except Exception:
     pass
+if det_loaded or cls_loaded:
+    perf_col1, perf_col2 = st.columns(2)
+    with perf_col1:
+        if det_loaded:
+            latest = detection_metrics_df.sort_values("timestamp").groupby("metricName").last()
+            st.markdown("**Detection**")
+            if "box_recall" in latest.index:
+                st.metric("Recall", f"{latest.loc['box_recall', 'metricValue'] * 100:.1f}%")
+            if "box_precision" in latest.index:
+                st.metric("Precision", f"{latest.loc['box_precision', 'metricValue'] * 100:.1f}%")
+            if "empty-frame-precision" in latest.index:
+                st.caption(f"Empty-frame precision: {latest.loc['empty-frame-precision', 'metricValue'] * 100:.1f}%")
+            if "empty_frame_accuracy" in latest.index:
+                st.caption(f"Empty-frame accuracy: {latest.loc['empty_frame_accuracy', 'metricValue'] * 100:.1f}%")
+    with perf_col2:
+        if cls_loaded:
+            latest = classification_metrics_df.sort_values("timestamp").groupby("metricName").last()
+            st.markdown("**Classification**")
+            if "Accuracy" in latest.index:
+                st.metric("Accuracy", f"{latest.loc['Accuracy', 'metricValue']:.3f}")
+            if "Precision" in latest.index:
+                st.metric("Precision", f"{latest.loc['Precision', 'metricValue']:.3f}")
+            try:
+                exp = classification_metrics_df.sort_values("timestamp").iloc[-1]["experiment"]
+                st.markdown(f'<a href="https://www.comet.com/bw4sz/boem/{exp}?experiment-tab=confusionMatrix" target="_blank">Confusion matrix →</a>', unsafe_allow_html=True)
+            except Exception:
+                pass
 
+st.markdown("---")
 st.header("Observations")
 
 # Add download button for all predictions
 try:
-    predictions_df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
+    _dl = _load_effective_predictions()
+    predictions_df = _dl if _dl is not None else _load_predictions_with_annotations()
     csv = predictions_df.to_csv(index=False)
     st.download_button(
         label="Download All Predictions Data",
@@ -167,11 +170,13 @@ default_file = app_data_dir / "all_predictions.shp"
 if default_file.exists():
     gdf_obs = gpd.read_file(default_file)
     gdf_obs = gdf_obs[gdf_obs['cropmodel_'].notna()]
-    annotations_df = load_annotations("app/data/annotations.csv")
     gdf_obs = apply_annotations_to_gdf(gdf_obs, annotations_df, gdf_image_col="crop_image", gdf_label_col="cropmodel_", gdf_set_col="set")
     gdf_obs = ensure_human_labeled(gdf_obs, set_col="set")
-    predictions_df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
-    unique_labels = sorted(gdf_obs['cropmodel_'].unique())
+    indices = _load_indices()
+    if indices:
+        unique_labels = indices["species_list"]
+    else:
+        unique_labels = sorted(gdf_obs['cropmodel_'].unique())
     score_threshold = st.slider(
         "Detection Confidence",
         min_value=0.0,

@@ -8,6 +8,7 @@ from datetime import datetime
 from utils.styling import load_css
 from utils.auth import require_login
 from utils.annotations import load_annotations, reduce_annotations, apply_annotations, ensure_human_labeled
+from utils.indices import load_predictions_indices, EFFECTIVE_PREDICTIONS_PATH
 
 def get_all_species(taxonomy_data):
     """Extract all species from the taxonomy data"""
@@ -43,6 +44,30 @@ def load_or_create_annotations():
             'user'
         ])
 
+
+@st.cache_data
+def _load_effective_predictions():
+    """Load effective predictions (annotations applied) when available."""
+    if Path(EFFECTIVE_PREDICTIONS_PATH).exists():
+        return pd.read_csv(EFFECTIVE_PREDICTIONS_PATH)
+    return None
+
+
+@st.cache_data
+def _load_predictions_with_annotations():
+    """Load base predictions and apply annotations (fallback when no effective CSV)."""
+    df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
+    ann = load_annotations("app/data/annotations.csv")
+    df = apply_annotations(df, ann, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
+    return ensure_human_labeled(df, set_col="set")
+
+
+@st.cache_data
+def _load_indices():
+    """Load pre-computed prediction indices for dropdowns and filtering."""
+    return load_predictions_indices()
+
+
 def app():
     require_login()
     st.title("Bulk Image Labeling")
@@ -65,57 +90,71 @@ def app():
         help="Show only images that have been reviewed by a human"
     )
 
-    # Load the predictions dataframe
-    predictions_df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
-    
-    # Apply overrides to predictions table
-    annotations_df = load_annotations("app/data/annotations.csv")
-    predictions_df = apply_annotations(predictions_df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
-    predictions_df = ensure_human_labeled(predictions_df, set_col="set")
-    
-    # Filter by confidence score
-    if 'score' in predictions_df.columns:
-        predictions_df = predictions_df[predictions_df['score'] >= confidence_threshold]
-    
-    # Filter by human-labeled if requested
-    if human_labeled_only:
-        predictions_df = predictions_df[predictions_df['human_labeled'] == True]
-    
-    # Load or create annotations dataframe
+    # Load indices (for dropdowns and id-based filtering) and predictions
+    indices = _load_indices()
+    effective = _load_effective_predictions()
+    if effective is not None:
+        predictions_df = effective.copy()
+    else:
+        predictions_df = _load_predictions_with_annotations().copy()
+
+    # Dropdown options from index when available, else from dataframe
+    if indices:
+        current_labels = indices["species_list"]
+        flights = indices.get("flight_list", [])
+    else:
+        current_labels = sorted(predictions_df["cropmodel_label"].dropna().unique().tolist())
+        flights = sorted(predictions_df["flight_name"].dropna().unique().tolist()) if "flight_name" in predictions_df.columns else []
+
+    # Load or create annotations dataframe (for saving / revert)
     annotations_df = load_or_create_annotations()
     latest_annotations = reduce_annotations(annotations_df)
-    
+
     # Load taxonomy data
     with open("app/data/taxonomy.json", 'r') as f:
         taxonomy_data = json.load(f)
-    
-    # Get all species from taxonomy
     all_species = get_all_species(taxonomy_data)
-    
-    # Get current labels from predictions
-    current_labels = sorted(predictions_df['cropmodel_label'].unique())
-    
-    # Create a filter for labels
+
+    # Create a filter for labels and flights
     selected_labels = st.multiselect(
         "Filter by current labels",
         options=current_labels,
         default=[]
     )
-    
-    # Optional flight filter
-    flights = sorted(predictions_df['flight_name'].unique()) if 'flight_name' in predictions_df.columns else []
     selected_flights = st.multiselect(
         "Filter by flight",
         options=flights,
         default=[]
     ) if flights else []
 
-    # Filter the dataframe based on selected labels and flights
-    filtered_df = predictions_df
-    if selected_labels:
-        filtered_df = filtered_df[filtered_df['cropmodel_label'].isin(selected_labels)]
-    if selected_flights:
-        filtered_df = filtered_df[filtered_df['flight_name'].isin(selected_flights)]
+    # Filter by labels/flights using index when available, else dataframe
+    if indices and (selected_labels or selected_flights):
+        filtered_ids = None
+        if selected_labels:
+            filtered_ids = set()
+            for lab in selected_labels:
+                filtered_ids.update(indices["by_species"].get(lab, []))
+        else:
+            filtered_ids = set(predictions_df["crop_image_id"].astype(str).tolist())
+        if selected_flights:
+            flight_ids = set()
+            for fl in selected_flights:
+                flight_ids.update(indices["by_flight"].get(fl, []))
+            filtered_ids = (filtered_ids & flight_ids) if filtered_ids is not None else flight_ids
+        cid = predictions_df["crop_image_id"].astype(str)
+        filtered_df = predictions_df[cid.isin(filtered_ids)].copy()
+    else:
+        filtered_df = predictions_df.copy()
+        if selected_labels:
+            filtered_df = filtered_df[filtered_df["cropmodel_label"].isin(selected_labels)]
+        if selected_flights:
+            filtered_df = filtered_df[filtered_df["flight_name"].isin(selected_flights)]
+
+    # Filter by confidence score and human-labeled
+    if "score" in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df["score"] >= confidence_threshold]
+    if human_labeled_only:
+        filtered_df = filtered_df[filtered_df["human_labeled"] == True]
     
     # Get all images from the images directory
     image_dir = Path("app/data/images")

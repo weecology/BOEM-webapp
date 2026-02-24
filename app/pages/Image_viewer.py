@@ -5,62 +5,92 @@ from utils.styling import load_css
 import pandas as pd
 from utils.auth import require_login
 from utils.annotations import load_annotations, apply_annotations, ensure_human_labeled
+from utils.indices import load_predictions_indices, EFFECTIVE_PREDICTIONS_PATH
+
+
+@st.cache_data
+def _load_effective_predictions():
+    if Path(EFFECTIVE_PREDICTIONS_PATH).exists():
+        return pd.read_csv(EFFECTIVE_PREDICTIONS_PATH)
+    return None
+
+
+@st.cache_data
+def _load_predictions_with_annotations():
+    df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
+    ann = load_annotations("app/data/annotations.csv")
+    df = apply_annotations(df, ann, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
+    return ensure_human_labeled(df, set_col="set")
+
+
+@st.cache_data
+def _load_indices():
+    return load_predictions_indices()
 
 
 def app():
     require_login()
     st.title("Predictions Viewer")
-    # Get experiment data
-    image_df = pd.read_csv("app/data/most_recent_all_flight_predictions.csv")
-    
-    # Apply annotation overrides (label and set)
-    annotations_df = load_annotations("app/data/annotations.csv")
-    image_df = apply_annotations(image_df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
-    image_df = ensure_human_labeled(image_df, set_col="set")
 
-    # Convert cropmodel_label to string type
-    image_df['cropmodel_label'] = image_df['cropmodel_label'].astype(str)
+    # Load predictions (effective if available, else base + annotations)
+    effective = _load_effective_predictions()
+    if effective is not None:
+        image_df = effective.copy()
+    else:
+        image_df = _load_predictions_with_annotations().copy()
+    image_df["cropmodel_label"] = image_df["cropmodel_label"].astype(str)
 
-    # Detection score slider
+    # Detection score slider and human-labeled filter
     detection_threshold = st.slider("Detection Confidence Threshold",
                                     min_value=0.0,
                                     max_value=1.0,
                                     value=0.8,
                                     step=0.01,
                                     help="Filter by model detection confidence (0-1 scale)")
-
-    # Add human-labeled filter
     human_labeled_only = st.checkbox(
         "Human-labeled only",
         value=True,
         help="Show only images that have been reviewed by a human")
 
-    if image_df is None:
+    if image_df is None or image_df.empty:
         st.warning("No images found in experiments")
         return
 
-    # Build species list based on current human-labeled filter
-    filtered_df = image_df[image_df['human_labeled'] == True] if human_labeled_only else image_df
+    # Species list from index when available, else from (filtered) dataframe
+    indices = _load_indices()
+    base_filtered = image_df[image_df["human_labeled"] == True] if human_labeled_only else image_df
+    if indices:
+        species_list = indices["species_list"]
+        # Default: first species in list that has data in base_filtered
+        default_index = 0
+        for i, sp in enumerate(species_list):
+            if sp in base_filtered["cropmodel_label"].values:
+                default_index = i
+                break
+    else:
+        species_list = sorted(base_filtered["cropmodel_label"].unique().tolist())
+        if not species_list:
+            st.warning("No records match the current filters.")
+            return
+        default_species = base_filtered["cropmodel_label"].value_counts().index[0]
+        default_index = species_list.index(default_species) if default_species in species_list else 0
 
-    if filtered_df.empty:
-        st.warning("No records match the current filters.")
-        return
+    selected_species = st.selectbox("Select a species", options=species_list, index=default_index)
 
-    species_list = sorted(filtered_df['cropmodel_label'].unique())
-
-    # Use standard Streamlit selector
-    # The default index is the most common species in the filtered data
-    default_species = filtered_df['cropmodel_label'].value_counts().index[0]
-    default_index = species_list.index(
-        default_species) if default_species in species_list else 0
-    selected_species = st.selectbox("Select a species",
-                                    options=species_list,
-                                    index=default_index)
-
-    # Filter images by selected species and detection score against the same filtered set
-    species_images = filtered_df[
-        (filtered_df['cropmodel_label'] == selected_species)
-        & (filtered_df['score'] >= detection_threshold)]
+    # Filter by species (using index ids when available) then score and human_labeled
+    if indices and selected_species in indices.get("by_species", {}):
+        species_ids = set(indices["by_species"][selected_species])
+        species_images = image_df[
+            image_df["crop_image_id"].astype(str).isin(species_ids)
+            & (image_df["score"] >= detection_threshold)
+        ]
+        if human_labeled_only:
+            species_images = species_images[species_images["human_labeled"] == True]
+    else:
+        species_images = base_filtered[
+            (base_filtered["cropmodel_label"] == selected_species)
+            & (base_filtered["score"] >= detection_threshold)
+        ]
 
     # Create image grid with 3 columns
     cols = st.columns(3)
