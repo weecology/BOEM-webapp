@@ -78,13 +78,15 @@ def _scientific_theme_css():
             box-shadow: 0 1px 2px rgba(0,0,0,0.04);
         }
 
-        /* ----- Select styling (align with theme) ----- */
+        /* ----- Select styling (align with theme, keep labels readable) ----- */
         .stSelectbox > div > div {
             font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-            font-size: 0.95rem;
-            padding: 0.5rem;
+            font-size: 0.8rem;
+            line-height: 1.2;
+            padding: 0.25rem 0.5rem;
             border: 1px solid #94a3b8;
             border-radius: 4px;
+            color: #111827;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 16L4 8h16z' fill='%231b3a57'/%3E%3C/svg%3E");
             background-repeat: no-repeat;
             background-position: right 0.6rem center;
@@ -98,7 +100,7 @@ def _scientific_theme_css():
             outline-offset: 0;
         }
         .stSelectbox label {
-            font-size: 0.95rem;
+            font-size: 0.85rem;
             color: #374151;
         }
     """ 

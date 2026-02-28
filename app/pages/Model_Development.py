@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 from utils.annotations import load_annotations, apply_annotations, ensure_human_labeled
 from utils.indices import load_predictions_indices
+from utils.taxonomy import species_display
 
 
 @st.cache_data
@@ -248,6 +249,7 @@ def app():
     )
 
     # --- Species Composition Analysis (moved from Species_Composition.py) ---
+    use_common = st.session_state.get("use_common_names", True)
     st.header("Species Composition Analysis")
     st.text("The species composition analysis shows how the predictions of species change over time during model development and annotation. This addresses the question of whether additional iterations of model development will lead to changes in downstream data.")
     predictions_df = pd.read_csv("app/data/predictions.csv")
@@ -277,23 +279,24 @@ def app():
     if human_labeled_only:
         filtered_df = filtered_df[filtered_df['human_labeled'] == True]
     
-    # Create and display raw count plot
-    def create_prediction_plots(predictions_df):
+    # Create and display raw count plot (use display names for Species)
+    def create_prediction_plots(predictions_df, use_common_names=True):
         if predictions_df is None:
             return None
         predictions_df = predictions_df.copy()
         predictions_df['timestamp'] = pd.to_datetime(predictions_df['timestamp'])
-        raw_counts = predictions_df.groupby(['timestamp', 'cropmodel_label']).size().reset_index(name='count')
+        predictions_df['Species'] = predictions_df['cropmodel_label'].map(lambda s: species_display(s, use_common_names))
+        raw_counts = predictions_df.groupby(['timestamp', 'Species']).size().reset_index(name='count')
         fig_raw = px.scatter(
             raw_counts,
             x='timestamp',
             y='count',
-            color='cropmodel_label',
+            color='Species',
             title='Species Composition Over Time (Raw Counts)',
             labels={
                 'timestamp': 'Date',
                 'count': 'Number of Detections',
-                'cropmodel_label': 'Species'
+                'Species': 'Species'
             },
         )
         fig_raw.update_traces(marker=dict(size=10))
@@ -308,9 +311,9 @@ def app():
             )
         )
         return fig_raw
-    raw_plot = create_prediction_plots(filtered_df)
+    raw_plot = create_prediction_plots(filtered_df, use_common)
     st.plotly_chart(raw_plot, use_container_width=True)
-    # Add rare species plot below
+    # Add rare species plot below (display names for Species)
     species_counts = filtered_df['cropmodel_label'].value_counts()
     if not species_counts.empty:
         max_count = species_counts.iloc[0]
@@ -320,12 +323,13 @@ def app():
             rare_df = filtered_df[filtered_df['cropmodel_label'].isin(rare_species.index)]
             rare_counts = rare_df['cropmodel_label'].value_counts().reset_index()
             rare_counts.columns = ['label', 'count']
+            rare_counts['Species'] = rare_counts['label'].map(lambda s: species_display(s, use_common))
             rare_fig = px.bar(
                 rare_counts,
-                x='label',
+                x='Species',
                 y='count',
                 title='Rare Species (<10% of Most Common)',
-                labels={'label': 'Species', 'count': 'Number of Instances'}
+                labels={'Species': 'Species', 'count': 'Number of Instances'}
             )
             st.plotly_chart(rare_fig, use_container_width=True)
         else:

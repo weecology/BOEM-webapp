@@ -31,6 +31,19 @@ def get_configured_credentials():
     return None, None
 
 
+def _is_local_dev_bypass() -> bool:
+    """True when a local-only bypass is enabled (env or secrets). Do not set on server."""
+    if os.getenv("BOEM_SKIP_LOGIN"):
+        return True
+    try:
+        auth = st.secrets.get("auth", {})
+        if auth.get("dev_bypass") or auth.get("skip_login"):
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def is_authenticated() -> bool:
     """Check if user is authenticated in session."""
     return bool(st.session_state.get("authenticated", False))
@@ -69,6 +82,19 @@ def login_form():
 
 def require_login():
     """Call at the top of pages. If not authenticated, show login and stop."""
+    # Local dev bypass: set BOEM_SKIP_LOGIN=1 or auth.dev_bypass in secrets (do not set on server)
+    if _is_local_dev_bypass():
+        if not is_authenticated():
+            st.session_state["authenticated"] = True
+            st.session_state["username"] = "local_dev"
+        if is_authenticated():
+            with st.sidebar:
+                st.caption(f"Signed in as: {st.session_state.get('username', '')} (dev bypass)")
+                if st.button("Log out"):
+                    logout()
+                    st.rerun()
+            return
+
     if is_authenticated():
         with st.sidebar:
             st.caption(f"Signed in as: {st.session_state.get('username', '')}")

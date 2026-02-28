@@ -6,6 +6,7 @@ import pandas as pd
 from utils.auth import require_login
 from utils.annotations import load_annotations, apply_annotations, ensure_human_labeled
 from utils.indices import load_predictions_indices, EFFECTIVE_PREDICTIONS_PATH
+from utils.taxonomy import species_display, to_scientific
 
 
 @st.cache_data
@@ -56,6 +57,8 @@ def app():
         st.warning("No images found in experiments")
         return
 
+    use_common = st.session_state.get("use_common_names", True)
+
     # Species list from index when available, else from (filtered) dataframe
     indices = _load_indices()
     base_filtered = image_df[image_df["human_labeled"] == True] if human_labeled_only else image_df
@@ -75,11 +78,18 @@ def app():
         default_species = base_filtered["cropmodel_label"].value_counts().index[0]
         default_index = species_list.index(default_species) if default_species in species_list else 0
 
-    selected_species = st.selectbox("Select a species", options=species_list, index=default_index)
+    selected_species = st.selectbox(
+        "Select a species",
+        options=species_list,
+        index=default_index,
+        format_func=lambda x: species_display(x, use_common),
+    )
+    # Resolve to scientific name for filtering (dropdown shows common/scientific per toggle)
+    selected_scientific = to_scientific(selected_species)
 
     # Filter by species (using index ids when available) then score and human_labeled
-    if indices and selected_species in indices.get("by_species", {}):
-        species_ids = set(indices["by_species"][selected_species])
+    if indices and selected_scientific in indices.get("by_species", {}):
+        species_ids = set(indices["by_species"][selected_scientific])
         species_images = image_df[
             image_df["crop_image_id"].astype(str).isin(species_ids)
             & (image_df["score"] >= detection_threshold)
@@ -88,7 +98,7 @@ def app():
             species_images = species_images[species_images["human_labeled"] == True]
     else:
         species_images = base_filtered[
-            (base_filtered["cropmodel_label"] == selected_species)
+            (base_filtered["cropmodel_label"] == selected_scientific)
             & (base_filtered["score"] >= detection_threshold)
         ]
 

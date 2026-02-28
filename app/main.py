@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 import sys
 from pathlib import Path
+import folium
 import leafmap.foliumap as leafmap
 import pandas as pd
 import geopandas as gpd
@@ -13,6 +14,7 @@ from utils.auth import require_login
 from utils.annotations import load_annotations, apply_annotations, apply_annotations_to_gdf, ensure_human_labeled
 from utils.indices import load_predictions_indices, EFFECTIVE_PREDICTIONS_PATH
 from utils.styling import inject_landing_css
+from utils.taxonomy import species_display, to_scientific
 
 st.set_page_config(
     page_title="Bureau of Ocean Energy Management - Gulf of America Biodiversity Survey",
@@ -23,6 +25,10 @@ st.set_page_config(
 # Require login for all content
 require_login()
 inject_landing_css()
+
+# Species name preference: common (default) vs scientific
+if "use_common_names" not in st.session_state:
+    st.session_state.use_common_names = True
 
 # Add the app directory to Python path
 app_dir = Path(__file__).parent
@@ -72,6 +78,16 @@ gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
 
 st.title("Bureau of Ocean Energy Management Biodiversity Survey")
 st.markdown("*Visualize biodiversity from aerial surveys of offshore energy areas—AI-assisted detection and classification of marine wildlife to support environmental assessment.*")
+
+# Toggle: show species as common names (default) or scientific names app-wide
+st.session_state.use_common_names = st.toggle(
+    "Show species as common names",
+    value=st.session_state.use_common_names,
+    help="When on, species are shown in English (e.g. Spotted Sandpiper). When off, scientific names are used (e.g. Actitis macularius). This setting applies across the app.",
+    key="species_name_toggle",
+)
+use_common = st.session_state.use_common_names
+
 with st.expander("About this tool"):
     st.markdown("Use this tool to explore biodiversity data from airborne surveys. The pipeline detects and classifies marine species in aerial imagery; outputs inform offshore project development with rapid, cost-effective monitoring. The viewer provides interactive maps, species analysis, and image galleries of detections.")
 
@@ -132,6 +148,11 @@ if det_loaded or cls_loaded:
                 st.caption(f"Empty-frame precision: {latest.loc['empty-frame-precision', 'metricValue'] * 100:.1f}%")
             if "empty_frame_accuracy" in latest.index:
                 st.caption(f"Empty-frame accuracy: {latest.loc['empty_frame_accuracy', 'metricValue'] * 100:.1f}%")
+            try:
+                det_exp = detection_metrics_df.sort_values("timestamp").iloc[-1]["experiment"]
+                st.markdown(f'<a href="https://www.comet.com/bw4sz/boem/{det_exp}" target="_blank">View detection experiment in Comet →</a>', unsafe_allow_html=True)
+            except Exception:
+                pass
     with perf_col2:
         if cls_loaded:
             latest = classification_metrics_df.sort_values("timestamp").groupby("metricName").last()
@@ -189,6 +210,7 @@ if default_file.exists():
         "Species",
         options=unique_labels,
         default=["Tursiops truncatus","Delphinidae"],
+        format_func=lambda x: species_display(x, use_common),
         help="Select species to display"
     )
     human_reviewed = st.checkbox(
@@ -205,19 +227,71 @@ if default_file.exists():
         transparent=True,
         attribution="GEBCO"
     )
+    # Custom pane so observation markers draw on top of other overlays (e.g. BOEM layers)
+    folium.map.CustomPane("observations_top", z_index=450, pointer_events=True).add_to(m    )
+    # Custom pane so observation markers draw on top of other overlays (e.g. BOEM layers)
+    folium.map.CustomPane("observations_top", z_index=450, pointer_events=True).add_to(m)
+    _boem_lease_blocks_url = (
+        "https://gis.boem.gov/arcgis/rest/services/BOEM_BSEE/MMC_Layers/MapServer/11/query"
+        "?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=geojson"
+    )
+    # _wind_lease_url = (
+    #     "https://services7.arcgis.com/G5Ma95RzqJRPKsWL/arcgis/rest/services/"
+    #     "Wind_Lease_Boundaries__BOEM_/FeatureServer/8/query"
+    #     "?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=geojson"
+    # )
+    # _wind_planning_url = (
+    #     "https://services7.arcgis.com/G5Ma95RzqJRPKsWL/arcgis/rest/services/"
+    #     "Wind_Planning_Areas__BOEM_/FeatureServer/7/query"
+    #     "?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=geojson"
+    # )
     try:
+        m.add_geojson(
+            _boem_lease_blocks_url,
+            layer_name="BOEM OCS Lease Blocks",
+            zoom_to_layer=False,
+            info_mode=None,
+            style={"color": "#686868", "weight": 0.4, "fillOpacity": 0},
+        )
+    except Exception:
+        pass  # layer optional; service may be unavailable
+    # try:
+    #     m.add_geojson(
+    #         _wind_lease_url,
+    #         layer_name="Wind Lease Boundaries",
+    #         zoom_to_layer=False,
+    #         info_mode="on_hover",
+    #         style={"color": "#0066cc", "weight": 2, "fillOpacity": 0.15},
+    #     )
+    # except Exception:
+    #     pass
+    # try:
+    #     m.add_geojson(
+    #         _wind_planning_url,
+    #         layer_name="Wind Planning Areas",
+    #         zoom_to_layer=False,
+    #         info_mode="on_hover",
+    #         style={"color": "#2d862d", "weight": 2, "fillOpacity": 0.1},
+    #     )
+    # except Exception:
+    #     pass
+    # m.add_layer_control()
+    try:
+        # Ensure we filter by scientific names (selector may show common names)
+        selected_scientific = [to_scientific(l) for l in selected_labels]
         filtered_gdf = gdf_obs[
             (gdf_obs['score'] >= score_threshold) &
-            (gdf_obs['cropmodel_'].isin(selected_labels))
+            (gdf_obs['cropmodel_'].isin(selected_scientific))
         ]
         if human_reviewed:
             filtered_gdf = filtered_gdf[filtered_gdf['human_labeled'] == True]
         if len(filtered_gdf) == 0:
             st.warning("No observations meet the selected filters")
         else:
-            # Remove image_link/crop_api_path logic
+            # Remove image_link/crop_api_path logic; rename to public-facing "Species"
             filtered_gdf = filtered_gdf[['score', 'cropmodel_', 'cropmode_1', 'set',
-                            'flight_n_1', 'date', 'lat', 'long', 'crop_image', 'geometry']].rename(columns={
+                            'flight_n_1', 'date', 'lat', 'long', 'crop_image', 'geometry']].copy()
+            filtered_gdf = filtered_gdf.rename(columns={
                 'score': 'Detection Score',
                 'cropmodel_': 'Species',
                 'cropmode_1': 'Species Confidence',
@@ -228,6 +302,7 @@ if default_file.exists():
                 'long': 'Longitude',
                 'crop_image': 'Image'
             })
+            filtered_gdf['Species'] = filtered_gdf['Species'].map(lambda s: species_display(s, use_common))
 
             m.add_gdf(
                 filtered_gdf,
@@ -235,7 +310,8 @@ if default_file.exists():
                 style={'color': "#0000FF"},
                 info_mode='on_click',
                 hover_style={'sticky': True},
-                info_columns=['Image']
+                info_columns=['Image'],
+                pane='observations_top',  # draw markers on top of other overlays
             )
     except Exception as e:
         st.error(f"Error processing vector data: {str(e)}")
@@ -249,9 +325,10 @@ if default_file.exists():
             img_path = Path("app/data/images") / str(img)
             with cols[idx % 3]:
                 if img_path.exists():
-                    # Add confidence score to caption
-                    confidence_score = filtered_gdf[filtered_gdf['Image'] == img]['Species Confidence'].values[0]
-                    st.image(str(img_path), caption=f"{img} (Confidence: {confidence_score:.2f})", use_container_width=True)
+                    row = filtered_gdf[filtered_gdf['Image'] == img].iloc[0]
+                    species_name = row['Species']
+                    caption = species_name if human_reviewed else f"{species_name} (Confidence: {row['Species Confidence']:.2f})"
+                    st.image(str(img_path), caption=caption, use_container_width=True)
                 else:
                     st.info(f"Image {img} not found.")
     else:
