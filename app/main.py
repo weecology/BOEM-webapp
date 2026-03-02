@@ -69,6 +69,7 @@ else:
     df = _load_predictions_with_annotations().copy()
 
 df = df.loc[df.score > 0.7]
+df = df[df["cropmodel_label"] != "FalsePositive"]
 df = df[df["cropmodel_label"].str.count(" ") == 1]
 
 annotations_df = load_annotations("app/data/annotations.csv")
@@ -185,13 +186,14 @@ try:
 except:
     pass
 
-m = leafmap.Map(center=[40, -70], zoom=6)
+m = leafmap.Map(center=[28, -90], zoom=6)
 app_data_dir = Path(__file__).parent / "data"
 default_file = app_data_dir / "all_predictions.shp"
 if default_file.exists():
     gdf_obs = gpd.read_file(default_file)
     gdf_obs = gdf_obs[gdf_obs['cropmodel_'].notna()]
     gdf_obs = apply_annotations_to_gdf(gdf_obs, annotations_df, gdf_image_col="crop_image", gdf_label_col="cropmodel_", gdf_set_col="set")
+    gdf_obs = gdf_obs[gdf_obs['cropmodel_'] != "FalsePositive"]
     gdf_obs = ensure_human_labeled(gdf_obs, set_col="set")
     indices = _load_indices()
     if indices:

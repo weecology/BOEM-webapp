@@ -14,7 +14,6 @@ def create_label_count_plots(label_counts_df, use_common_names=True):
         return None
     counts_df = label_counts_df.groupby('cropmodel_label').size().reset_index(name='count')
     counts_df.columns = ['label', 'count']
-    counts_df = counts_df[counts_df['label'] != 'FalsePositive']
     counts_df = counts_df[counts_df['label'] != '0']
     counts_df['Species'] = counts_df['label'].map(lambda s: species_display(s, use_common_names))
     label_order = counts_df.sort_values('count', ascending=False)['Species']
@@ -41,6 +40,7 @@ def app():
     annotations_df = load_annotations("app/data/annotations.csv")
     df = apply_annotations(df, annotations_df, id_col="crop_image_id", label_col="cropmodel_label", set_col="set")
     df = ensure_human_labeled(df, set_col="set")
+    df = df[df["cropmodel_label"] != "FalsePositive"]
     df = df[df["cropmodel_label"].str.count(" ") == 1]
     date_component = df["flight_name"].str.split("_").str[1]
     datetime_values = pd.to_datetime(date_component, format='%Y%m%d', errors='coerce')

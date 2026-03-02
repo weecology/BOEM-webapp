@@ -40,6 +40,7 @@ def app():
     else:
         image_df = _load_predictions_with_annotations().copy()
     image_df["cropmodel_label"] = image_df["cropmodel_label"].astype(str)
+    image_df = image_df[image_df["cropmodel_label"] != "FalsePositive"]
 
     # Detection score slider and human-labeled filter
     detection_threshold = st.slider("Detection Confidence Threshold",

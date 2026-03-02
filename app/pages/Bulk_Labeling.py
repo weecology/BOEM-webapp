@@ -261,19 +261,6 @@ def app():
     # Image grid in a fragment: only this block reruns on checkbox/button clicks
     @st.fragment
     def image_grid_fragment():
-        # Handle quick FP save from fragment (e.g. "Mark FP" button)
-        if st.session_state.get("pending_fp_save"):
-            mark_review = st.session_state.get("bulk_mark_review", True)
-            n = _save_annotations(list(st.session_state.selected_images), "FalsePositive", mark_review=mark_review)
-            st.session_state.selected_images.clear()
-            st.session_state.pending_fp_save = False
-            st.toast(f"Marked {n} image(s) as FalsePositive")
-            st.rerun()
-
-        # Sync checkbox keys with selected_images so "Select all" / "Clear all" show correctly
-        for img_path in page_images:
-            st.session_state[f"select_{img_path.name}"] = img_path.name in st.session_state.selected_images
-
         # Quick actions
         if st.button("Select all in current page", key="select_all_page"):
             for img_path in page_images:
@@ -282,9 +269,8 @@ def app():
 
         if st.button("Clear all selections", key="clear_all_selections"):
             st.session_state.selected_images.clear()
-            for k in list(st.session_state.keys()):
-                if isinstance(k, str) and k.startswith("select_"):
-                    del st.session_state[k]
+            for img_path in page_images:
+                st.session_state[f"select_{img_path.name}"] = False
 
         cols = st.columns(4)
         for idx, img_path in enumerate(page_images):
@@ -296,16 +282,10 @@ def app():
                     else:
                         st.warning(f"Image not found: {img_path.name}")
 
-                    # Checkbox: state synced above from selected_images
                     if st.checkbox("Select", key=f"select_{img_path.name}"):
                         st.session_state.selected_images.add(img_path.name)
                     else:
                         st.session_state.selected_images.discard(img_path.name)
-
-                    # One-click FalsePositive for rapid relabeling
-                    if st.button("Mark FP", key=f"fp_{img_path.name}", type="secondary"):
-                        st.session_state.selected_images.add(img_path.name)
-                        st.session_state.pending_fp_save = True
                 except Exception as e:
                     st.error(f"Error loading image {img_path.name}: {str(e)}")
 
