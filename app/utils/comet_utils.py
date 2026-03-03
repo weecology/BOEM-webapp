@@ -35,6 +35,7 @@ def get_comet_metrics(metric_type='pipeline',
 
     metrics_data = []
     all_predictions = []
+    val_counts_data = []
 
     for exp in experiments:
         # Filter by tags
@@ -85,6 +86,28 @@ def get_comet_metrics(metric_type='pipeline',
                 pass
             metrics_data.append(metrics_df)
 
+        # For classification experiments, fetch val_annotations.csv to get per-class validation counts
+        if metric_type == 'classification':
+            try:
+                val_asset = exp.get_asset_by_name(
+                    'val_annotations.csv', asset_type='dataframe')
+                val_df = pd.read_csv(io.BytesIO(val_asset))
+                label_col = (
+                    'cropmodel_label' if 'cropmodel_label' in val_df.columns
+                    else 'label'
+                )
+                if label_col in val_df.columns:
+                    counts = (
+                        val_df[label_col]
+                        .value_counts()
+                        .rename_axis('class_name')
+                        .reset_index(name='val_support')
+                    )
+                    counts['experiment'] = exp.name
+                    val_counts_data.append(counts)
+            except Exception:
+                pass
+
         # Process predictions if requested
         if include_predictions:
             try:
@@ -102,7 +125,33 @@ def get_comet_metrics(metric_type='pipeline',
 
     # Combine and save metrics
     if metrics_data:
-        metrics_df = pd.concat(metrics_data)
+        metrics_df = pd.concat(metrics_data, ignore_index=True)
+        # Enrich classification metrics with validation sample counts from val_annotations.csv
+        if metric_type == 'classification' and val_counts_data:
+            val_counts_df = pd.concat(val_counts_data, ignore_index=True)
+            # Parse class name from metricName (e.g. "Class Accuracy_Larus argentatus" -> "Larus argentatus")
+            def _class_name_from_metric(name):
+                if name and str(name).startswith('Class Accuracy_'):
+                    return name[len('Class Accuracy_'):]
+                return None
+            metrics_df['class_name'] = metrics_df['metricName'].map(_class_name_from_metric)
+            metrics_df = metrics_df.merge(
+                val_counts_df,
+                on=['experiment', 'class_name'],
+                how='left',
+            )
+            # For overall metrics (e.g. Micro-Average Accuracy), use total validation count per experiment
+            totals = (
+                val_counts_df.groupby('experiment')['val_support']
+                .sum()
+                .reset_index()
+            )
+            totals.columns = ['experiment', 'val_support_total']
+            metrics_df = metrics_df.merge(totals, on='experiment', how='left')
+            metrics_df['val_support'] = metrics_df['val_support'].fillna(
+                metrics_df['val_support_total']
+            )
+            metrics_df = metrics_df.drop(columns=['val_support_total', 'class_name'])
         if output_file:
             metrics_df.to_csv(output_file, index=False)
 
