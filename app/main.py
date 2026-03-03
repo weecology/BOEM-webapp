@@ -158,13 +158,21 @@ if det_loaded or cls_loaded:
         if cls_loaded:
             latest = classification_metrics_df.sort_values("timestamp").groupby("metricName").last()
             st.markdown("**Classification**")
-            if "Accuracy" in latest.index:
+            # Classification experiments log "Micro-Average Accuracy" / "Micro-Average Precision", not "Accuracy"/"Precision"
+            if "Micro-Average Accuracy" in latest.index:
+                st.metric("Micro-Average Accuracy", f"{latest.loc['Micro-Average Accuracy', 'metricValue']:.3f}")
+            elif "Accuracy" in latest.index:
                 st.metric("Accuracy", f"{latest.loc['Accuracy', 'metricValue']:.3f}")
-            if "Precision" in latest.index:
+            if "Micro-Average Precision" in latest.index:
+                st.metric("Micro-Average Precision", f"{latest.loc['Micro-Average Precision', 'metricValue']:.3f}")
+            elif "Precision" in latest.index:
                 st.metric("Precision", f"{latest.loc['Precision', 'metricValue']:.3f}")
             try:
-                exp = classification_metrics_df.sort_values("timestamp").iloc[-1]["experiment"]
-                st.markdown(f'<a href="https://www.comet.com/bw4sz/boem/{exp}?experiment-tab=confusionMatrix" target="_blank">Confusion matrix →</a>', unsafe_allow_html=True)
+                last_row = classification_metrics_df.sort_values("timestamp").iloc[-1]
+                exp_key = last_row.get("experimentKey", None)
+                exp_name = last_row["experiment"]
+                link_id = exp_key if (exp_key is not None and pd.notna(exp_key) and str(exp_key).strip()) else exp_name
+                st.markdown(f'<a href="https://www.comet.com/bw4sz/boem/{link_id}?experiment-tab=confusionMatrix" target="_blank">Confusion matrix →</a>', unsafe_allow_html=True)
             except Exception:
                 pass
 

@@ -76,6 +76,8 @@ def get_comet_metrics(metric_type='pipeline',
             metrics_df['timestamp'] = pd.to_datetime(metrics_df['timestamp'],
                                                      unit='ms')
             metrics_df['experiment'] = exp.name
+            # Experiment key (hex) is required for Comet URLs; name alone is not reliable
+            metrics_df['experimentKey'] = getattr(exp, 'key', None) or getattr(exp, 'id', None)
             try:
                 metrics_df["flight_name"] = exp.get_parameters_summary(
                     "flight_name")["valueCurrent"]

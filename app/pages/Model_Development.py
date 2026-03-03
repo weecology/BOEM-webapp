@@ -11,47 +11,10 @@ from utils.taxonomy import species_display
 def _load_indices():
     return load_predictions_indices()
 
-def create_metric_plots(metrics_df):
-    """Create plots showing metric over time (points only)."""
-    df = metrics_df.copy()
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
-    fig_metrics = px.scatter(
-        df,
-        x="timestamp",
-        y="metricValue",
-        facet_col="metricName",
-        title="Metrics Over Time",
-    )
-    fig_metrics.update_traces(marker=dict(size=10))
-    fig_metrics.update_layout(
-        height=400,
-        margin=dict(l=20, r=20, t=40, b=20),
-        showlegend=False,
-    )
-    return fig_metrics
-
-def create_comet_links(experiment_id):
-    """Create HTML links to different Comet dashboard views"""
-    base_url = "https://www.comet.com/bw4sz/boem/"
-    
-    links = {
-        'Detection Images': f"{base_url}{experiment_id}?experiment-tab=images&groupBy=metadata%25_context&orderBy=desc&sortBy=metadata%25_context",
-        'Confusion Matrix': f"{base_url}{experiment_id}?experiment-tab=confusionMatrix",
-        'Loss Curves': f"{base_url}{experiment_id}?experiment-tab=charts",
-        'Classification Images': f"{base_url}{experiment_id}?experiment-tab=images&groupBy=metadata%25_context&orderBy=desc&sortBy=metadata%25_context&query=classification"
-    }
-    
-    # Create HTML links
-    html_links = {
-        k: f'<a href="{v}" target="_blank">{k}</a>'
-        for k, v in links.items()
-    }
-    
-    return html_links
-
 def app():
     st.header("Model Development")
-    st.text("Machine learning models are developed in collaboration with the University of Florida. The detection model identifies objects of interest, and the classification model classifies them the finest level of detail possible. The model for each flight starts from a backbone model trained on the entire dataset and additional data from the ecological monitoring community. It is then customized for each flight.")
+    st.text("Machine learning models are developed in collaboration with the University of Florida. The detection model identifies objects of interest, and the classification model classifies them to the finest level of detail possible. A single backbone model is trained on the entire dataset and additional data from the ecological monitoring community.")
+    show_trend = st.checkbox("Show trend line on metric plots", value=False, help="Add a linear (OLS) trend line to scatter plots; minimal performance impact.")
 
     st.header("Detection Backbone")
     # --- Detection Model Metrics Section ---
@@ -71,6 +34,7 @@ def app():
                 color='metricName',
                 title='Detection Model Metrics Over Time',
                 labels={'timestamp': 'Timestamp', 'metricValue': 'Metric Value', 'metricName': 'Metric'},
+                trendline='ols' if show_trend else None,
             )
             fig_detection.update_traces(marker=dict(size=10))
             fig_detection.update_layout(
@@ -112,6 +76,7 @@ def app():
                 y='metricValue',
                 title='Classification Model Metrics Over Time',
                 labels={'timestamp': 'Timestamp', 'metricValue': 'Metric Value'},
+                trendline='ols' if show_trend else None,
             )
             fig_classification.update_traces(marker=dict(size=10))
             fig_classification.update_layout(
@@ -144,6 +109,7 @@ def app():
                     y="metricValue",
                     title=f"{selected_metric} over time",
                     labels={"timestamp": "Timestamp", "metricValue": "Metric Value"},
+                    trendline='ols' if show_trend else None,
                 )
                 fig_species.update_traces(marker=dict(size=10))
                 fig_species.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20))
@@ -155,98 +121,6 @@ def app():
             st.dataframe(classification_metrics_df)
     except Exception as e:
         st.warning(f"Could not load classification model metrics: {e}")
-
-    # --- Latest Flight Metrics Comparison ---
-    st.header("Latest Flight Metrics")
-    try:
-        metrics_df = pd.read_csv("app/data/metrics.csv")
-        # Exclude 0.0 values from aborted runs so y-axis scales to real data
-        metrics_df = metrics_df[metrics_df["metricValue"] != 0]
-        if not metrics_df.empty:
-            # Get the latest metrics for each flight and metric
-            latest_metrics = metrics_df.sort_values('timestamp').groupby(['flight_name', 'metricName']).last().reset_index()
-            
-            # Create bar chart
-            fig_latest = px.bar(
-                latest_metrics,
-                x='flight_name',
-                y='metricValue',
-                color='metricName',
-                title='Latest Metrics by Flight',
-                labels={
-                    'flight_name': 'Flight',
-                    'metricValue': 'Metric Value',
-                    'metricName': 'Metric'
-                },
-                barmode='group'
-            )
-            fig_latest.update_layout(
-                height=400,
-                margin=dict(l=20, r=20, t=40, b=20),
-                xaxis_tickangle=-45,
-                legend=dict(
-                    yanchor="top",
-                    y=0.99,
-                    xanchor="left",
-                    x=1.02
-                )
-            )
-            st.plotly_chart(fig_latest, use_container_width=True)
-            
-            # Show table
-            with st.expander("View Latest Metrics Data"):
-                st.dataframe(latest_metrics)
-        else:
-            st.info("No flight metrics available.")
-    except Exception as e:
-        st.warning(f"Could not load flight metrics: {e}")
-
-    st.header("Flight Model Metrics")
-    metrics_df = pd.read_csv("app/data/metrics.csv")
-
-    #Flight name dropdown
-    flight_name = st.selectbox("Select Flight Name", metrics_df["flight_name"].unique())
-
-    # Get experiment data
-    metrics_df = pd.read_csv("app/data/metrics.csv")
-
-    # Filter metrics and predictions for selected flight name
-    metrics_df = metrics_df[metrics_df["flight_name"] == flight_name]
-    # Exclude 0.0 values from aborted runs so y-axis scales to real data
-    metrics_df = metrics_df[metrics_df["metricValue"] != 0]
-
-    # Create and display metrics plot
-    st.subheader("Training Metrics")
-    metrics_plot = create_metric_plots(metrics_df)
-    st.plotly_chart(metrics_plot, use_container_width=True)
-
-    # Display raw data in expandable sections
-    with st.expander("View Raw Metrics Data"):
-        st.dataframe(metrics_df[['metricName', 'metricValue', 'timestamp', 'flight_name']])
-
-    # Create experiment links table at the bottom
-    st.subheader("Comet.ml Dashboard Links")
-    # Get unique experiments
-    experiments = metrics_df[['experiment', 'flight_name']].drop_duplicates()
-    # Create links for each experiment
-    links_data = []
-    for _, row in experiments.iterrows():
-        links = create_comet_links(row['experiment'])
-        links_data.append({
-            'Flight': row['flight_name'],
-            'Experiment ID': row['experiment'],
-            **links
-        })
-    # Create DataFrame with links
-    links_df = pd.DataFrame(links_data)
-    # Display as HTML table
-    st.write(
-        links_df.to_html(
-            escape=False,
-            index=False
-        ),
-        unsafe_allow_html=True
-    )
 
     # --- Species Composition Analysis (moved from Species_Composition.py) ---
     use_common = st.session_state.get("use_common_names", True)
