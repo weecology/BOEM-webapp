@@ -46,7 +46,7 @@ def app():
     datetime_values = pd.to_datetime(date_component, format='%Y%m%d', errors='coerce')
     df["timestamp"] = datetime_values.astype(str)
     gdf = gpd.read_file(default_file.parent / "all_predictions.shp")
-    gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
+    gdf['date'] = pd.to_datetime(gdf['timestamp'], errors='coerce')
 
     st.subheader("Predicted Species")
     hist_plot = create_label_count_plots(df, use_common)

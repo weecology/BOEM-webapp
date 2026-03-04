@@ -75,7 +75,7 @@ df = df[df["cropmodel_label"].str.count(" ") == 1]
 annotations_df = load_annotations("app/data/annotations.csv")
 gdf = gpd.read_file(data_path.parent / "all_predictions.shp")
 gdf = apply_annotations_to_gdf(gdf, annotations_df, gdf_image_col="crop_image", gdf_label_col="cropmodel_", gdf_set_col="set")
-gdf['date'] = pd.to_datetime(gdf['date'], errors='coerce')
+gdf['date'] = pd.to_datetime(gdf['timestamp'], errors='coerce')
 
 st.title("Bureau of Ocean Energy Management Biodiversity Survey")
 st.markdown("*Visualize biodiversity from aerial surveys of offshore energy areas—AI-assisted detection and classification of marine wildlife to support environmental assessment.*")
@@ -199,6 +199,26 @@ app_data_dir = Path(__file__).parent / "data"
 default_file = app_data_dir / "all_predictions.shp"
 if default_file.exists():
     gdf_obs = gpd.read_file(default_file)
+    # Normalize shapefile column names (ESRI Shapefile truncates to 10 chars; prepare uses Lat/Lon, timestamp)
+    _cols = gdf_obs.columns
+    if "Lat" in _cols and "lat" not in _cols:
+        gdf_obs["lat"] = gdf_obs["Lat"]
+    if "Lon" in _cols and "long" not in _cols:
+        gdf_obs["long"] = gdf_obs["Lon"]
+    if "timestamp" in _cols and "date" not in _cols:
+        gdf_obs["date"] = pd.to_datetime(gdf_obs["timestamp"], errors="coerce")
+    if "flight_nam" in _cols and "flight_n_1" not in _cols:
+        gdf_obs["flight_n_1"] = gdf_obs["flight_nam"]
+    elif "flight_name" in _cols and "flight_n_1" not in _cols:
+        gdf_obs["flight_n_1"] = gdf_obs["flight_name"]
+    if "human_lab" in _cols and "human_labeled" not in _cols:
+        gdf_obs["human_labeled"] = gdf_obs["human_lab"]
+    if "crop_imag" in _cols and "crop_image" not in _cols:
+        gdf_obs["crop_image"] = gdf_obs["crop_imag"]
+    elif "crop_image_" in _cols and "crop_image" not in _cols:
+        gdf_obs["crop_image"] = gdf_obs["crop_image_"]
+    if "cropmodel_l" in _cols and "cropmodel_" not in _cols:
+        gdf_obs["cropmodel_"] = gdf_obs["cropmodel_l"]
     gdf_obs = gdf_obs[gdf_obs['cropmodel_'].notna()]
     gdf_obs = apply_annotations_to_gdf(gdf_obs, annotations_df, gdf_image_col="crop_image", gdf_label_col="cropmodel_", gdf_set_col="set")
     gdf_obs = gdf_obs[gdf_obs['cropmodel_'] != "FalsePositive"]
@@ -286,6 +306,7 @@ if default_file.exists():
     # except Exception:
     #     pass
     # m.add_layer_control()
+    gallery_gdf = None  # set in else when we have filtered data; shown below the map
     try:
         # Ensure we filter by scientific names (selector may show common names)
         selected_scientific = [to_scientific(l) for l in selected_labels]
@@ -313,6 +334,7 @@ if default_file.exists():
                 'crop_image': 'Image'
             })
             filtered_gdf['Species'] = filtered_gdf['Species'].map(lambda s: species_display(s, use_common))
+            gallery_gdf = filtered_gdf
 
             m.add_gdf(
                 filtered_gdf,
@@ -326,40 +348,41 @@ if default_file.exists():
     except Exception as e:
         st.error(f"Error processing vector data: {str(e)}")
     m.to_streamlit(height=700, width=None)
-    # Gallery of up to 20 images below the map
-    gallery_images = filtered_gdf['Image'].dropna().unique()[:20]
-    if len(gallery_images) > 0:
-        st.subheader("Selected Observations")
-        cols = st.columns(3)
-        for idx, img in enumerate(gallery_images):
-            img_path = Path("app/data/images") / str(img)
-            with cols[idx % 3]:
-                if img_path.exists():
-                    row = filtered_gdf[filtered_gdf['Image'] == img].iloc[0]
-                    species_name = row['Species']
-                    caption = species_name if human_reviewed else f"{species_name} (Confidence: {row['Species Confidence']:.2f})"
-                    st.image(str(img_path), caption=caption, use_container_width=True)
-                else:
-                    st.info(f"Image {img} not found.")
-    else:
-        st.info("No images available for the selected observations.")
 
-    # Download button for filtered data
-    try:
-        temp_file = app_data_dir / "temp_filtered.shp"
-        filtered_gdf.to_file(temp_file)
-        with open(temp_file, 'rb') as file:
-            shapefile_bytes = file.read()
-            st.download_button(
-                label="Download Data",
-                data=shapefile_bytes,
-                file_name=f"predictions_filtered.shp",
-                mime="application/octet-stream",
-                help=f"Download filtered observations (score ≥ {score_threshold})"
-            )
-        temp_file.unlink()
-    except Exception as e:
-        st.error(f"Error preparing download: {str(e)}")
+    # Selected Observations gallery and download (below the map)
+    if gallery_gdf is not None:
+        gallery_images = gallery_gdf['Image'].dropna().unique()[:20]
+        if len(gallery_images) > 0:
+            st.subheader("Selected Observations")
+            cols = st.columns(3)
+            for idx, img in enumerate(gallery_images):
+                img_path = Path("app/data/images") / str(img)
+                with cols[idx % 3]:
+                    if img_path.exists():
+                        row = gallery_gdf[gallery_gdf['Image'] == img].iloc[0]
+                        species_name = row['Species']
+                        caption = species_name if human_reviewed else f"{species_name} (Confidence: {row['Species Confidence']:.2f})"
+                        st.image(str(img_path), caption=caption, use_container_width=True)
+                    else:
+                        st.info(f"Image {img} not found.")
+        else:
+            st.info("No images available for the selected observations.")
+
+        try:
+            temp_file = app_data_dir / "temp_filtered.shp"
+            gallery_gdf.to_file(temp_file)
+            with open(temp_file, 'rb') as file:
+                shapefile_bytes = file.read()
+                st.download_button(
+                    label="Download Data",
+                    data=shapefile_bytes,
+                    file_name=f"predictions_filtered.shp",
+                    mime="application/octet-stream",
+                    help=f"Download filtered observations (score ≥ {score_threshold})"
+                )
+            temp_file.unlink()
+        except Exception as e:
+            st.error(f"Error preparing download: {str(e)}")
 else:
     st.error(f"Data file not found: {default_file}")
 
