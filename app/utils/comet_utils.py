@@ -10,213 +10,292 @@ import zipfile
 # Load environment variables
 load_dotenv()
 
+# Gulf of Mexico flights to include (matches prepare.py / gulf_flights.txt)
+GULF_FLIGHTS_PATH = Path(__file__).resolve().parent.parent / "data" / "gulf_flights.txt"
 
-def get_comet_metrics(metric_type='pipeline',
-                      output_file=None,
-                      metrics_to_track=None,
-                      include_predictions=False):
-    """
-    Get metrics from Comet.ml experiments
-    
-    Args:
-        metric_type (str): Type of metrics to fetch ('pipeline', 'detection', or 'classification')
-        output_file (str): Path to save the metrics CSV file
-        metrics_to_track (list): List of metric names to track
-        include_predictions (bool): Whether to include and process predictions
-    
+
+def _flight_basename(flight_name: str) -> str:
+    """Strip first underscore prefix (e.g. 'JPG' from 'JPG_20241219_164400') for gulf_flights.txt matching."""
+    if not flight_name:
+        return ""
+    parts = flight_name.split("_")
+    return "_".join(parts[1:]) if len(parts) > 1 else flight_name
+
+
+def _load_gulf_flights(path: Path = None) -> set:
+    """Load flight basenames from gulf_flights.txt (one per line; # and blank ignored). Empty set = no filter."""
+    path = path or GULF_FLIGHTS_PATH
+    if not path.exists():
+        return set()
+    basenames = set()
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                basenames.add(line)
+    return basenames
+
+
+def get_all_comet_metrics():
+    """Fetch pipeline, detection, and classification metrics from the Comet API.
+
+    - Pipeline: only the latest experiment per flight_name (metrics + final_predictions).
+    - Detection and classification: every experiment (metrics only).
+
     Returns:
-        tuple: (metrics_df, predictions_df) if include_predictions is True, else metrics_df
+        dict with keys 'pipeline', 'detection', 'classification' (DataFrames)
+        and 'predictions' (DataFrame).
     """
     api = API(api_key=os.getenv('COMET_API_KEY'))
     workspace = os.getenv('COMET_WORKSPACE')
+    gulf_basenames = _load_gulf_flights()
 
-    # Get all experiments from the BOEM project
-    experiments = api.get(f"{workspace}/boem")
+    print("Fetching experiment list from Comet API...")
+    experiments = list(api.get(f"{workspace}/boem"))
+    print(f"Found {len(experiments)} total experiments.")
 
-    metrics_data = []
-    all_predictions = []
-    val_counts_data = []
+    # First pass: classify each experiment and keep latest pipeline per flight only
+    detection_experiments = []   # (exp, flight_name)
+    classification_experiments = []
+    latest_pipeline_by_flight = {}  # flight_name -> exp (max start_server_timestamp)
 
     for exp in experiments:
-        # Filter by tags
         tags = exp.get_tags()
-        if metric_type not in tags:
+        is_pipeline = 'pipeline' in tags
+        is_detection = 'detection' in tags
+        is_classification = 'classification' in tags
+        if not (is_pipeline or is_detection or is_classification):
             continue
-
-        # Skip archived or running experiments
         if exp.archived or exp.get_state() == 'running':
             continue
-
-        # Skip incomplete pipeline experiments
-        if metric_type == 'pipeline' and 'complete' not in tags:
-            continue
-
-        # Skip preliminary flight
-        if metric_type == 'pipeline':
-            try: 
-                flight_name = exp.get_parameters_summary(
-                    "flight_name")["valueCurrent"]
-            except:
-                flight_name = None
-            if flight_name == "JPG_2024_Jan27":
+        try:
+            flight_name = exp.get_parameters_summary("flight_name")["valueCurrent"]
+        except Exception:
+            flight_name = None
+        if gulf_basenames:
+            if not flight_name:
+                continue
+            if _flight_basename(flight_name) not in gulf_basenames:
                 continue
 
-        # Get metrics
-        metrics = exp.get_metrics()
-        metrics_df = pd.DataFrame(metrics)
+        if is_detection:
+            detection_experiments.append((exp, flight_name))
+        if is_classification:
+            classification_experiments.append((exp, flight_name))
+        if is_pipeline and flight_name:
+            exp_ts = getattr(exp, 'start_server_timestamp', None) or 0
+            if flight_name not in latest_pipeline_by_flight or exp_ts > getattr(
+                latest_pipeline_by_flight[flight_name], 'start_server_timestamp', None
+            ) or 0:
+                latest_pipeline_by_flight[flight_name] = exp
 
+    DETECTION_METRICS = [
+        "box_recall", "box_precision", "empty_frame_accuracy",
+        "zero_shot_evaluation_box_precision", "zero_shot_evaluation_box_recall",
+        "zero_shot_evaluation_empty_frame_accuracy",
+    ]
+    PIPELINE_METRICS = ["box_recall", "box_precision", "empty_frame_accuracy"]
+
+    pipeline_metrics_data = []
+    detection_metrics_data = []
+    classification_metrics_data = []
+    classification_val_counts = []
+    all_predictions = []
+
+    def _process_metrics(exp, flight_name, mdf, metrics_to_track):
         if metrics_to_track:
-            metrics_df = metrics_df[metrics_df["metricName"].isin(
-                metrics_to_track)]
+            mdf = mdf[mdf["metricName"].isin(metrics_to_track)]
+        if mdf.empty:
+            return None
+        mdf = (mdf.sort_values(by='timestamp', ascending=False)
+               .groupby('metricName').first().reset_index())
+        mdf['timestamp'] = pd.to_datetime(mdf['timestamp'], unit='ms')
+        mdf['experiment'] = exp.name
+        mdf['experimentKey'] = getattr(exp, 'key', None) or getattr(exp, 'id', None)
+        if flight_name:
+            mdf['flight_name'] = flight_name
+        return mdf
 
-        if not metrics_df.empty:
-            # Get latest value for each metric
-            metrics_df = metrics_df.sort_values(
-                by='timestamp',
-                ascending=False).groupby('metricName').first().reset_index()
-            metrics_df['timestamp'] = pd.to_datetime(metrics_df['timestamp'],
-                                                     unit='ms')
-            metrics_df['experiment'] = exp.name
-            # Experiment key (hex) is required for Comet URLs; name alone is not reliable
-            metrics_df['experimentKey'] = getattr(exp, 'key', None) or getattr(exp, 'id', None)
-            try:
-                metrics_df["flight_name"] = exp.get_parameters_summary(
-                    "flight_name")["valueCurrent"]
-            except:
-                pass
-            metrics_data.append(metrics_df)
+    total_processed = len(latest_pipeline_by_flight) + len(detection_experiments) + len(classification_experiments)
+    idx = 0
 
-        # For classification experiments, fetch val_annotations.csv to get per-class validation counts
-        if metric_type == 'classification':
-            try:
-                val_asset = exp.get_asset_by_name(
-                    'val_annotations.csv', asset_type='dataframe')
-                val_df = pd.read_csv(io.BytesIO(val_asset))
-                label_col = (
-                    'cropmodel_label' if 'cropmodel_label' in val_df.columns
-                    else 'label'
+    # Process latest pipeline per flight (metrics + final_predictions only)
+    for flight_name, exp in sorted(latest_pipeline_by_flight.items()):
+        idx += 1
+        tags = exp.get_tags()
+        print(f"  [{idx}/{total_processed}] {exp.name} (flight={flight_name}, type=pipeline [latest])")
+        raw_metrics_df = None
+        if 'complete' in tags:
+            print(f"      Fetching metrics...")
+            raw_metrics_df = pd.DataFrame(exp.get_metrics())
+        if 'complete' in tags and raw_metrics_df is not None and not raw_metrics_df.empty:
+            mdf = _process_metrics(exp, flight_name, raw_metrics_df.copy(), PIPELINE_METRICS)
+            if mdf is not None:
+                pipeline_metrics_data.append(mdf)
+        try:
+            print(f"      Fetching final_predictions.csv...")
+            final_predictions = exp.get_asset_by_name(
+                'final_predictions.csv', asset_type='dataframe')
+            final_predictions = pd.read_csv(io.BytesIO(final_predictions))
+            final_predictions["flight_name"] = flight_name
+            final_predictions["experiment"] = exp.name
+            final_predictions["timestamp"] = pd.to_datetime(
+                exp.start_server_timestamp, unit='ms')
+            all_predictions.append(final_predictions)
+        except Exception:
+            pass
+
+    # Process all detection experiments (metrics only)
+    for exp, flight_name in detection_experiments:
+        idx += 1
+        print(f"  [{idx}/{total_processed}] {exp.name} (flight={flight_name or 'N/A'}, type=detection)")
+        print(f"      Fetching metrics...")
+        raw_metrics_df = pd.DataFrame(exp.get_metrics())
+        if raw_metrics_df is not None and not raw_metrics_df.empty:
+            mdf = _process_metrics(exp, flight_name, raw_metrics_df.copy(), DETECTION_METRICS)
+            if mdf is not None:
+                detection_metrics_data.append(mdf)
+
+    # Process all classification experiments (metrics + val_annotations)
+    for exp, flight_name in classification_experiments:
+        idx += 1
+        print(f"  [{idx}/{total_processed}] {exp.name} (flight={flight_name or 'N/A'}, type=classification)")
+        print(f"      Fetching metrics...")
+        raw_metrics_df = pd.DataFrame(exp.get_metrics())
+        if raw_metrics_df is not None and not raw_metrics_df.empty:
+            mdf = _process_metrics(exp, flight_name, raw_metrics_df.copy(), None)
+            if mdf is not None:
+                classification_metrics_data.append(mdf)
+        try:
+            print(f"      Fetching val_annotations.csv...")
+            val_asset = exp.get_asset_by_name(
+                'val_annotations.csv', asset_type='dataframe')
+            val_df = pd.read_csv(io.BytesIO(val_asset))
+            label_col = (
+                'cropmodel_label' if 'cropmodel_label' in val_df.columns
+                else 'label'
+            )
+            if label_col in val_df.columns:
+                counts = (
+                    val_df[label_col]
+                    .value_counts()
+                    .rename_axis('class_name')
+                    .reset_index(name='val_support')
                 )
-                if label_col in val_df.columns:
-                    counts = (
-                        val_df[label_col]
-                        .value_counts()
-                        .rename_axis('class_name')
-                        .reset_index(name='val_support')
-                    )
-                    counts['experiment'] = exp.name
-                    val_counts_data.append(counts)
-            except Exception:
-                pass
+                counts['experiment'] = exp.name
+                classification_val_counts.append(counts)
+        except Exception:
+            pass
 
-        # Process predictions if requested
-        if include_predictions:
-            try:
-                final_predictions = exp.get_asset_by_name(
-                    'final_predictions.csv', asset_type='dataframe')
-                final_predictions = pd.read_csv(io.BytesIO(final_predictions))
-                final_predictions["flight_name"] = exp.get_parameters_summary(
-                    "flight_name")["valueCurrent"]
-                final_predictions["experiment"] = exp.name
-                final_predictions["timestamp"] = pd.to_datetime(
-                    exp.start_server_timestamp, unit='ms')
-                all_predictions.append(final_predictions)
-            except:
-                pass
+    # --- Assemble and save results ---
+    results = {}
 
-    # Combine and save metrics
-    if metrics_data:
-        metrics_df = pd.concat(metrics_data, ignore_index=True)
-        # Enrich classification metrics with validation sample counts from val_annotations.csv
-        if metric_type == 'classification' and val_counts_data:
-            val_counts_df = pd.concat(val_counts_data, ignore_index=True)
-            # Parse class name from metricName (e.g. "Class Accuracy_Larus argentatus" -> "Larus argentatus")
+    # Detection
+    detection_df = pd.DataFrame()
+    if detection_metrics_data:
+        detection_df = pd.concat(detection_metrics_data, ignore_index=True)
+        detection_df.to_csv("app/data/detection_model_metrics.csv", index=False)
+    results['detection'] = detection_df
+
+    # Classification (enriched with val_support)
+    classification_df = pd.DataFrame()
+    if classification_metrics_data:
+        classification_df = pd.concat(classification_metrics_data, ignore_index=True)
+        if classification_val_counts:
+            val_counts_df = pd.concat(classification_val_counts, ignore_index=True)
+
             def _class_name_from_metric(name):
                 if name and str(name).startswith('Class Accuracy_'):
                     return name[len('Class Accuracy_'):]
                 return None
-            metrics_df['class_name'] = metrics_df['metricName'].map(_class_name_from_metric)
-            metrics_df = metrics_df.merge(
-                val_counts_df,
-                on=['experiment', 'class_name'],
-                how='left',
-            )
-            # For overall metrics (e.g. Micro-Average Accuracy), use total validation count per experiment
-            totals = (
-                val_counts_df.groupby('experiment')['val_support']
-                .sum()
-                .reset_index()
-            )
-            totals.columns = ['experiment', 'val_support_total']
-            metrics_df = metrics_df.merge(totals, on='experiment', how='left')
-            metrics_df['val_support'] = metrics_df['val_support'].fillna(
-                metrics_df['val_support_total']
-            )
-            metrics_df = metrics_df.drop(columns=['val_support_total', 'class_name'])
-        if output_file:
-            metrics_df.to_csv(output_file, index=False)
 
-    # Process predictions if included
-    if include_predictions and all_predictions:
+            classification_df['class_name'] = classification_df['metricName'].map(
+                _class_name_from_metric)
+            classification_df = classification_df.merge(
+                val_counts_df, on=['experiment', 'class_name'], how='left')
+            totals = (val_counts_df.groupby('experiment')['val_support']
+                      .sum().reset_index())
+            totals.columns = ['experiment', 'val_support_total']
+            classification_df = classification_df.merge(
+                totals, on='experiment', how='left')
+            classification_df['val_support'] = classification_df['val_support'].fillna(
+                classification_df['val_support_total'])
+            classification_df = classification_df.drop(
+                columns=['val_support_total', 'class_name'])
+        classification_df.to_csv(
+            "app/data/classification_model_metrics.csv", index=False)
+    results['classification'] = classification_df
+
+    # Pipeline
+    pipeline_df = pd.DataFrame()
+    if pipeline_metrics_data:
+        pipeline_df = pd.concat(pipeline_metrics_data, ignore_index=True)
+        pipeline_df.to_csv("app/data/metrics.csv", index=False)
+    results['pipeline'] = pipeline_df
+
+    # Predictions
+    predictions_df = pd.DataFrame()
+    if all_predictions:
         predictions_df = pd.concat(all_predictions)
         predictions_df.to_csv("app/data/predictions.csv", index=False)
-
-        # Get latest predictions
-        # Get the latest date for each flight_name
         latest_dates = predictions_df.groupby(
             'flight_name')['timestamp'].max().reset_index()
-
-        # Merge to get all predictions from the latest date for each flight_name
         latest_predictions = predictions_df.merge(
             latest_dates, on=['flight_name', 'timestamp'])
-
         latest_predictions.to_csv(
             "app/data/most_recent_all_flight_predictions.csv", index=False)
-        return metrics_df, predictions_df
+    results['predictions'] = predictions_df
 
-    return metrics_df
+    print("Done: detection=%d rows, classification=%d rows, pipeline=%d rows, predictions=%d rows." % (
+        len(results['detection']), len(results['classification']),
+        len(results['pipeline']), len(results['predictions'])))
+    return results
 
-def detection_model_metrics():
-    """Get the metrics for the detection model"""
-    return get_comet_metrics(
-        metric_type='detection',
-        output_file="app/data/detection_model_metrics.csv",
-        metrics_to_track=["box_recall", "box_precision", "empty_frame_accuracy"]
+def _has_coords_in_df(df):
+    """True if dataframe has lat/lon columns (Lat/Lon or lat/long)."""
+    return (
+        ('Lat' in df.columns and 'Lon' in df.columns)
+        or ('lat' in df.columns and 'long' in df.columns)
     )
 
-def classification_model_metrics():
-    """Get the metrics for the classification model (overall + per-species, e.g. Class Accuracy_Alle alle)."""
-    return get_comet_metrics(
-        metric_type='classification',
-        output_file="app/data/classification_model_metrics.csv",
-        metrics_to_track=None,  # fetch all metrics so species metrics like "Class Accuracy_Alle alle" are included
-    )
 
-def flight_model_metrics():
-    """Get all experiments from the BOEM project with duration > 10min"""
-    return get_comet_metrics(
-        metric_type='pipeline',
-        output_file="app/data/metrics.csv",
-        metrics_to_track=["box_recall", "box_precision", "empty_frame_accuracy"],
-        include_predictions=True
-    )
+def _get_lat_lon_columns(df):
+    """Return (lat_col, lon_col) for geometry. Prefer Lat/Lon then lat/long."""
+    if 'Lat' in df.columns and 'Lon' in df.columns:
+        return 'Lat', 'Lon'
+    if 'lat' in df.columns and 'long' in df.columns:
+        return 'lat', 'long'
+    return None, None
 
-def create_shapefiles(annotations, metadata):
+
+def create_shapefiles(annotations, metadata=None):
     """Create shapefiles for each flight_name.
     Expects annotations to include human_labeled column (from normalize_predictions_scores).
     Shapefile column names truncated to 10 chars: human_labeled -> human_lab
-    """
-    metadata_df = pd.read_csv(metadata)
-    # Get the latest prediction for each flight_name
-    annotations = annotations.copy()
-    annotations["unique_image"] = annotations["image_path"].apply(lambda x: os.path.splitext(x)[0]).str.split("_").str.join("_")
 
-    # All together as one shapefile
-    metadata_df["unique_image"] = metadata_df["unique_image"].apply(lambda x: x.split("\\")[-1])
-    merged_predictions = annotations.merge(metadata_df[["unique_image", "flight_name", "date", "lat", "long"]], on='unique_image')
+    When annotations already have Lat/Lon (or lat/long), metadata is ignored and no join is done.
+    When metadata is provided and annotations lack coords, merges on unique_image to get lat/long.
+    """
+    annotations = annotations.copy()
+    lat_col, lon_col = _get_lat_lon_columns(annotations)
+
+    if lat_col and lon_col:
+        # Coords already in predictions (upstream final_predictions.csv); no metadata join
+        merged_predictions = annotations
+    else:
+        # Legacy: join with metadata to get lat/long
+        if metadata is None:
+            raise ValueError("create_shapefiles: annotations have no Lat/Lon (or lat/long) and metadata path was not provided")
+        metadata_df = pd.read_csv(metadata)
+        annotations["unique_image"] = annotations["image_path"].apply(lambda x: os.path.splitext(x)[0]).str.split("_").str.join("_")
+        metadata_df["unique_image"] = metadata_df["unique_image"].apply(lambda x: x.split("\\")[-1])
+        merged_predictions = annotations.merge(metadata_df[["unique_image", "flight_name", "date", "lat", "long"]], on='unique_image')
+        lat_col, lon_col = 'lat', 'long'
+
     # Rename human_labeled to human_lab for shapefile 10-char column limit
     if "human_labeled" in merged_predictions.columns:
         merged_predictions = merged_predictions.rename(columns={"human_labeled": "human_lab"})
-    gdf = gpd.GeoDataFrame(merged_predictions, geometry=gpd.points_from_xy(merged_predictions.long, merged_predictions.lat))
+    gdf = gpd.GeoDataFrame(merged_predictions, geometry=gpd.points_from_xy(merged_predictions[lon_col], merged_predictions[lat_col]))
     gdf.crs = "EPSG:4326"
     gdf.to_file("app/data/all_predictions.shp", driver='ESRI Shapefile')
 
@@ -248,3 +327,34 @@ def download_images(experiment_name, save_dir='app/data/images'):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(save_dir)
     zip_path.unlink()  # Remove the zip file after extraction
+
+
+def download_flythrough_videos(flight_to_experiment, save_dir="app/data/videos"):
+    """Download the flythrough video per flight from Comet (asset named {flight_name}_flythrough.avi).
+    Uses the experiment already chosen per flight (e.g. from latest_predictions); no experiment list fetch.
+    flight_to_experiment: dict mapping flight_name -> experiment name.
+    """
+    if not flight_to_experiment:
+        return
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    api = API(api_key=os.getenv("COMET_API_KEY"))
+    workspace = os.getenv("COMET_WORKSPACE")
+
+    for flight_name, experiment_name in flight_to_experiment.items():
+        asset_name = f"{flight_name}_flythrough.avi"
+        out_path = save_dir / asset_name
+        try:
+            experiment = api.get(f"{workspace}/boem", experiment=experiment_name)
+            assets = experiment.get_asset_list()
+            asset = next((a for a in assets if a.get("fileName") == asset_name), None)
+            if asset is None:
+                print(f"  No asset {asset_name} in {experiment_name}, skipping.")
+                continue
+            print(f"  Downloading {asset_name} from {experiment_name}...")
+            data = experiment.get_asset(asset["assetId"])
+            with open(out_path, "wb") as f:
+                f.write(data)
+            print(f"    Saved to {out_path}")
+        except Exception as e:
+            print(f"    Failed to download {flight_name}_flythrough.avi: {e}")

@@ -57,6 +57,20 @@ streamlit run app/main.py
 
 3. The application will open in your default web browser at `http://localhost:8501`
 
+## 📊 Data preparation
+
+The app uses predictions and crops that are prepared by the `prepare.py` script. Run it before or after pulling new data:
+
+```bash
+python prepare.py
+```
+
+The script downloads metrics and predictions from Comet, then keeps only **Gulf of Mexico flights**. The set of flights to include is controlled by a text file so you don’t need to recompute from metadata:
+
+- **`app/data/gulf_flights.txt`** — List of flight basenames to include (one per line). Blank lines and lines starting with `#` are ignored. Flight names in predictions are matched by basename (e.g. `JPG_20241219_164400` matches `20241219_164400`).
+
+To add or remove flights, edit `app/data/gulf_flights.txt` and re-run `prepare.py`.
+
 ## 📁 Project Structure
 
 ```

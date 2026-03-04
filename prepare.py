@@ -7,8 +7,8 @@ from pathlib import Path
 import json
 import os
 import shutil
+import sys
 
-GULF_MAX_LONGITUDE = -80
 IMAGES_DIR = Path("app/data/images")
 MANIFEST_PATH = IMAGES_DIR / "crop_manifest.json"
 
@@ -72,24 +72,6 @@ def flight_basename(flight_name: str) -> str:
     return flight_name
 
 
-def get_gulf_flights(metadata_path: str = "app/data/metadata.csv") -> set:
-    """Return metadata flight_name basenames whose mean longitude is in the
-    Gulf of Mexico (west of GULF_MAX_LONGITUDE)."""
-    if not os.path.exists(metadata_path):
-        return set()
-    metadata_df = pd.read_csv(metadata_path)
-    mean_lon = metadata_df.groupby("flight_name")["long"].mean()
-    return set(mean_lon[mean_lon < GULF_MAX_LONGITUDE].index)
-
-
-def filter_gulf_predictions(predictions: pd.DataFrame,
-                            gulf_basenames: set) -> pd.DataFrame:
-    """Keep only predictions whose flight maps to a Gulf metadata basename."""
-    basenames = predictions["flight_name"].apply(flight_basename)
-    mask = basenames.isin(gulf_basenames)
-    return predictions[mask].copy()
-
-
 def load_manifest() -> dict:
     """Load the crop download manifest (previously downloaded experiments)."""
     if MANIFEST_PATH.exists():
@@ -120,47 +102,43 @@ def clear_crop_images():
 
 if __name__ == '__main__':
     # --- 1. Download newest metrics and predictions from Comet ---
-    comet_utils.flight_model_metrics()
-    comet_utils.detection_model_metrics()
-    comet_utils.classification_model_metrics()
+    print("\n[1/10] Downloading metrics and predictions from Comet...")
+    comet_utils.get_all_comet_metrics()
 
-    # --- 2. Load raw latest predictions ---
+    # --- 2. Load latest predictions (already Gulf-only from Comet) ---
+    print("[2/10] Loading latest predictions...")
     latest_predictions = pd.read_csv(
         "app/data/most_recent_all_flight_predictions.csv")
-
-    # --- 3. Extract metadata for any new flights (needed for Gulf filter) ---
-    for fn in latest_predictions['flight_name'].unique():
-        fb = flight_basename(fn)
-        if not os.path.exists(f"app/data/metadata/{fb}.csv"):
-            extract_flight_coordinates(fb)
-        else:
-            print(f"Metadata already exists for {fn}")
-    generate_metadata()
-
-    # --- 4. Filter to Gulf of Mexico flights only ---
-    gulf_basenames = get_gulf_flights()
-    print(f"Gulf of Mexico flights (by metadata): {sorted(gulf_basenames)}")
-
-    latest_predictions = filter_gulf_predictions(latest_predictions,
-                                                 gulf_basenames)
-    n_flights = latest_predictions['flight_name'].nunique()
-    print(f"After Gulf filter: {len(latest_predictions)} predictions "
-          f"across {n_flights} flight(s)")
-
     if latest_predictions.empty:
-        print("WARNING: No Gulf flights found. "
-              "Check metadata and .aflight files.")
+        print("WARNING: No Gulf flights found. Check gulf_flights.txt and Comet prediction data.")
+        print("\nDone.\n")
+        sys.exit(1)
 
-    # Overwrite the CSV so the app only sees Gulf data
-    latest_predictions.to_csv(
-        "app/data/most_recent_all_flight_predictions.csv", index=False)
+    # --- 3. Extract metadata only when predictions don't already have Lat/Lon ---
+    has_coords = (
+        ('Lat' in latest_predictions.columns and 'Lon' in latest_predictions.columns)
+        or ('lat' in latest_predictions.columns and 'long' in latest_predictions.columns)
+    )
+    if not has_coords:
+        print("[3/10] Extracting flight coordinates (no Lat/Lon in predictions)...")
+        for fn in latest_predictions['flight_name'].unique():
+            fb = flight_basename(fn)
+            if not os.path.exists(f"app/data/metadata/{fb}.csv"):
+                extract_flight_coordinates(fb)
+            else:
+                print(f"Metadata already exists for {fn}")
+        generate_metadata()
+    else:
+        print("[3/10] Predictions already have coordinates — skipping metadata extraction.")
 
-    # --- 5. Normalize scores and add human_labeled ---
+    # --- 4. Normalize scores and add human_labeled ---
+    print("[4/10] Normalizing scores and human_labeled...")
     latest_predictions = normalize_predictions_scores(latest_predictions)
     latest_predictions.to_csv(
         "app/data/most_recent_all_flight_predictions.csv", index=False)
 
-    # --- 6. Apply annotations and build indices ---
+    # --- 5. Apply annotations and build indices ---
+    print("[5/10] Applying annotations and building indices...")
     annotations_df = load_annotations("app/data/annotations.csv")
     effective_predictions = apply_annotations(
         latest_predictions, annotations_df,
@@ -181,19 +159,25 @@ if __name__ == '__main__':
     indices_path = Path("app/data/predictions_indices.json")
     with open(indices_path, "w") as f:
         json.dump(indices, f, indent=2)
-    print(f"Wrote {indices_path} and {effective_path}")
+    print(f"      Wrote {indices_path} and {effective_path}")
 
-    # --- 7. Normalize predictions.csv (full history) ---
+    # --- 6. Normalize predictions.csv (full history) ---
+    print("[6/10] Normalizing full predictions history...")
     predictions_path = Path("app/data/predictions.csv")
     if predictions_path.exists():
         predictions_df = pd.read_csv(predictions_path)
         predictions_df = normalize_predictions_scores(predictions_df)
         predictions_df.to_csv(predictions_path, index=False)
 
-    # --- 8. Create shapefiles ---
-    comet_utils.create_shapefiles(latest_predictions, "app/data/metadata.csv")
+    # --- 7. Create shapefiles ---
+    print("[7/10] Creating shapefiles...")
+    comet_utils.create_shapefiles(
+        latest_predictions,
+        metadata=None if has_coords else "app/data/metadata.csv",
+    )
 
-    # --- 9. Smart crop download ---
+    # --- 8. Smart crop download ---
+    print("[8/10] Checking crop download...")
     current_experiments = sorted(
         latest_predictions['experiment'].unique().tolist())
     manifest = load_manifest()
@@ -248,4 +232,16 @@ if __name__ == '__main__':
                   "from disk")
 
         save_manifest(current_experiments)
-        print(f"Downloaded crops for {len(current_experiments)} experiment(s)")
+        print(f"      Downloaded crops for {len(current_experiments)} experiment(s)")
+
+    # --- 9. Flythrough videos (one per flight from its latest experiment) ---
+    print("[9/10] Downloading flythrough videos...")
+    flight_to_experiment = (
+        latest_predictions.dropna(subset=["flight_name", "experiment"])
+        .drop_duplicates("flight_name")
+        .set_index("flight_name")["experiment"]
+        .to_dict()
+    )
+    comet_utils.download_flythrough_videos(flight_to_experiment, save_dir="app/data/videos")
+
+    print("\nDone.\n")
