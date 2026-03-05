@@ -330,7 +330,7 @@ def download_images(experiment_name, save_dir='app/data/images'):
 
 
 def download_flythrough_videos(flight_to_experiment, save_dir="app/data/videos"):
-    """Download the flythrough video per flight from Comet (asset named {flight_name}_flythrough.avi).
+    """Download the flythrough video per flight from Comet (asset named {flight_name}_flythrough.mp4).
     Uses the experiment already chosen per flight (e.g. from latest_predictions); no experiment list fetch.
     flight_to_experiment: dict mapping flight_name -> experiment name.
     """
@@ -342,7 +342,7 @@ def download_flythrough_videos(flight_to_experiment, save_dir="app/data/videos")
     workspace = os.getenv("COMET_WORKSPACE")
 
     for flight_name, experiment_name in flight_to_experiment.items():
-        asset_name = f"{flight_name}_flythrough.avi"
+        asset_name = f"{flight_name}_flythrough.mp4"
         out_path = save_dir / asset_name
         try:
             experiment = api.get(f"{workspace}/boem", experiment=experiment_name)
@@ -357,4 +357,4 @@ def download_flythrough_videos(flight_to_experiment, save_dir="app/data/videos")
                 f.write(data)
             print(f"    Saved to {out_path}")
         except Exception as e:
-            print(f"    Failed to download {flight_name}_flythrough.avi: {e}")
+            print(f"    Failed to download {flight_name}_flythrough.mp4: {e}")
