@@ -90,7 +90,7 @@ st.session_state.use_common_names = st.toggle(
 use_common = st.session_state.use_common_names
 
 with st.expander("About this tool"):
-    st.markdown("Use this tool to explore biodiversity data from airborne surveys. The pipeline detects and classifies marine species in aerial imagery; outputs inform offshore project development with rapid, cost-effective monitoring. The viewer provides interactive maps, species analysis, and image galleries of detections.")
+    st.markdown("Use this tool to explore biodiversity data from airborne surveys. The pipeline using AI vision models to detect and classify marine species in aerial imagery. The outputs of these models inform offshore project development with rapid, cost-effective biological monitoring. The viewer provides interactive maps, species analysis, and image galleries of detections. The tool was developed by the University of Florida in collaboration with the Bureau of Ocean Energy Management, US Fish and Wildlife Service, and USGS")
 
 # Conceptual figure (hero): highlight workflow
 _conceptual_path = app_dir / "www" / "conceptual_figure.png"
@@ -100,26 +100,16 @@ if _conceptual_path.exists():
     conceptual_figure = Image.open(_conceptual_path)
     st.image(conceptual_figure, caption="**Figure 1.** Raw flight image with detections and classifications overlaid (e.g. bottlenose dolphins).", use_container_width=True)
 
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("### Overview")
-    st.markdown("""
-- **Processing:** Detect and classify marine wildlife; generate distribution maps and abundance estimates; analyze temporal and spatial patterns.
-- **Viewer:** Interactive maps (survey tracks and observations), species analysis, and image galleries of detections.
-""")
-
-with col2:
-    st.markdown("### Progress")
-    df_labeled = ensure_human_labeled(df, "set")
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        st.metric("Observations", f"{len(df):,}")
-    with m2:
-        st.metric("Human-reviewed", f"{df_labeled['human_labeled'].sum():,}")
-    with m3:
-        st.metric("Species", df["cropmodel_label"].nunique())
-    st.caption(f"Aerial surveys: {df['flight_name'].nunique()}")
+st.markdown("### Progress")
+df_labeled = ensure_human_labeled(df, "set")
+m1, m2, m3 = st.columns(3)
+with m1:
+    st.metric("Observations", f"{len(df):,}")
+with m2:
+    st.metric("Human-reviewed", f"{df_labeled['human_labeled'].sum():,}")
+with m3:
+    st.metric("Species", df["cropmodel_label"].nunique())
+st.caption(f"Aerial surveys: {df['flight_name'].nunique()}")
 
 # Model performance (held-out evaluation data)
 st.markdown("### Model performance")
@@ -160,13 +150,13 @@ if det_loaded or cls_loaded:
             st.markdown("**Classification**")
             # Classification experiments log "Micro-Average Accuracy" / "Micro-Average Precision", not "Accuracy"/"Precision"
             if "Micro-Average Accuracy" in latest.index:
-                st.metric("Micro-Average Accuracy", f"{latest.loc['Micro-Average Accuracy', 'metricValue']:.3f}")
+                st.metric("Micro-Average Accuracy", f"{latest.loc['Micro-Average Accuracy', 'metricValue'] * 100:.1f}%")
             elif "Accuracy" in latest.index:
-                st.metric("Accuracy", f"{latest.loc['Accuracy', 'metricValue']:.3f}")
+                st.metric("Accuracy", f"{latest.loc['Accuracy', 'metricValue'] * 100:.1f}%")
             if "Micro-Average Precision" in latest.index:
-                st.metric("Micro-Average Precision", f"{latest.loc['Micro-Average Precision', 'metricValue']:.3f}")
+                st.metric("Micro-Average Precision", f"{latest.loc['Micro-Average Precision', 'metricValue'] * 100:.1f}%")
             elif "Precision" in latest.index:
-                st.metric("Precision", f"{latest.loc['Precision', 'metricValue']:.3f}")
+                st.metric("Precision", f"{latest.loc['Precision', 'metricValue'] * 100:.1f}%")
             try:
                 last_row = classification_metrics_df.sort_values("timestamp").iloc[-1]
                 exp_key = last_row.get("experimentKey", None)
@@ -178,6 +168,13 @@ if det_loaded or cls_loaded:
 
 st.markdown("---")
 st.header("Observations")
+
+with st.expander("How to use"):
+    st.markdown("""
+- Click on any point on the map to view its metadata
+- Use the confidence score slider to filter observations
+- Select species to show/hide from the map
+""")
 
 # Add download button for all predictions
 try:
@@ -385,10 +382,3 @@ if default_file.exists():
             st.error(f"Error preparing download: {str(e)}")
 else:
     st.error(f"Data file not found: {default_file}")
-
-st.info("""
-**How to use:**
-- Click on any point on the map to view its metadata
-- Use the confidence score slider to filter observations
-- Select species to show/hide from the map
-""")

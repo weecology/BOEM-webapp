@@ -5,7 +5,8 @@ from utils.auth import require_login
 from utils.indices import load_predictions_indices
 
 
-VIDEOS_DIR = Path("app/data/videos")
+# Resolve relative to this file so it works regardless of Streamlit cwd
+VIDEOS_DIR = Path(__file__).resolve().parents[1] / "data" / "videos"
 
 
 @st.cache_data
@@ -55,6 +56,16 @@ def app():
 
     st.video(str(video_path))
     st.caption(f"**{selected}** — detection flythrough (`.avi`).")
+
+    with open(video_path, "rb") as f:
+        video_bytes = f.read()
+    st.download_button(
+        label="Download video",
+        data=video_bytes,
+        file_name=video_filename,
+        mime="video/x-msvideo",
+        key="flight_video_download",
+    )
 
 
 if __name__ == "__main__":

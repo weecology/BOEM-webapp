@@ -38,7 +38,7 @@ def get_all_species(taxonomy_data):
 def load_or_create_annotations():
     """Load existing annotations or create new annotations file"""
     annotations_path = Path("app/data/annotations.csv")
-    
+
     if annotations_path.exists():
         return pd.read_csv(annotations_path)
     else:
@@ -111,6 +111,23 @@ def _load_image_bytes(path_str: str):
         return None
 
 
+@st.cache_data
+def _load_image_rgb(path_str: str):
+    """Load image and return as RGB (PIL Image). Converts BGR→RGB for images saved as BGR (e.g. by OpenCV)."""
+    img_path = Path(path_str)
+    if not img_path.exists():
+        return None
+    try:
+        img = Image.open(img_path)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        # If crops were saved as BGR (OpenCV), PIL reads channel 0 as R (actually B) and channel 2 as B (actually R). Swap R and B.
+        r, g, b = img.split()
+        return Image.merge("RGB", (b, g, r))
+    except Exception:
+        return None
+
+
 def _save_annotations(image_ids, new_label, mark_review=True):
     """Append annotations for given image_ids and save. Clears annotation cache."""
     predictions_df = st.session_state.get("bulk_labeling_predictions_df")
@@ -145,7 +162,9 @@ def _save_annotations(image_ids, new_label, mark_review=True):
 def app():
     require_login()
     st.title("Bulk Image Labeling")
-    st.text("Select multiple images and update their labels in bulk")
+    st.markdown("""
+    AI models are imperfect, which is why we have a human-in-the-loop system to flag and review observations.This page allows you to select multiple images and update their labels in bulk. You can select images by filtering by current labels, flight, and confidence score. You can also mark images as FalsePositive, which will be used to train the model to improve its accuracy.
+    """)
 
     # Confidence score slider
     confidence_threshold = st.slider(
@@ -154,15 +173,13 @@ def app():
         max_value=1.0,
         value=0.85,
         step=0.01,
-        help="Filter by model detection confidence (0-1 scale)"
-    )
+        help="Filter by model detection confidence (0-1 scale)")
 
     # Human-labeled filter
     human_labeled_only = st.checkbox(
         "Human-labeled only",
         value=False,
-        help="Show only images that have been reviewed by a human"
-    )
+        help="Show only images that have been reviewed by a human")
 
     # Load indices (for dropdowns and id-based filtering) and predictions
     indices = _load_indices()
@@ -181,8 +198,10 @@ def app():
         current_labels = indices["species_list"]
         flights = indices.get("flight_list", [])
     else:
-        current_labels = sorted(predictions_df["cropmodel_label"].dropna().unique().tolist())
-        flights = sorted(predictions_df["flight_name"].dropna().unique().tolist()) if "flight_name" in predictions_df.columns else []
+        current_labels = sorted(
+            predictions_df["cropmodel_label"].dropna().unique().tolist())
+        flights = sorted(predictions_df["flight_name"].dropna().unique(
+        ).tolist()) if "flight_name" in predictions_df.columns else []
 
     # Load or create annotations dataframe (for saving / revert)
     annotations_df = load_or_create_annotations()
@@ -199,10 +218,7 @@ def app():
         format_func=lambda x: species_display(x, use_common),
     )
     selected_flights = st.multiselect(
-        "Filter by flight",
-        options=flights,
-        default=[]
-    ) if flights else []
+        "Filter by flight", options=flights, default=[]) if flights else []
 
     # Resolve to scientific names for filtering (dropdown shows common/scientific per toggle)
     selected_labels_scientific = [to_scientific(l) for l in selected_labels]
@@ -215,44 +231,60 @@ def app():
             for lab in selected_labels_scientific:
                 filtered_ids.update(indices["by_species"].get(lab, []))
         else:
-            filtered_ids = set(predictions_df["crop_image_id"].astype(str).tolist())
+            filtered_ids = set(
+                predictions_df["crop_image_id"].astype(str).tolist())
         if selected_flights:
             flight_ids = set()
             for fl in selected_flights:
                 flight_ids.update(indices["by_flight"].get(fl, []))
-            filtered_ids = (filtered_ids & flight_ids) if filtered_ids is not None else flight_ids
+            filtered_ids = (
+                filtered_ids
+                & flight_ids) if filtered_ids is not None else flight_ids
         cid = predictions_df["crop_image_id"].astype(str)
         filtered_df = predictions_df[cid.isin(filtered_ids)].copy()
     else:
         filtered_df = predictions_df.copy()
         if selected_labels:
-            filtered_df = filtered_df[filtered_df["cropmodel_label"].isin(selected_labels_scientific)]
+            filtered_df = filtered_df[filtered_df["cropmodel_label"].isin(
+                selected_labels_scientific)]
         if selected_flights:
-            filtered_df = filtered_df[filtered_df["flight_name"].isin(selected_flights)]
+            filtered_df = filtered_df[filtered_df["flight_name"].isin(
+                selected_flights)]
 
     # Filter by confidence score and human-labeled
     if "score" in filtered_df.columns:
         filtered_df = filtered_df[filtered_df["score"] >= confidence_threshold]
     if human_labeled_only:
         filtered_df = filtered_df[filtered_df["human_labeled"] == True]
-    
+
     # Get all images from the images directory (cached)
     image_files = _get_all_image_files()
 
     # Filter images that exist in our dataframe
-    valid_images = [img for img in image_files if img.name in filtered_df['crop_image_id'].values]
+    valid_images = [
+        img for img in image_files
+        if img.name in filtered_df['crop_image_id'].values
+    ]
 
     # Pagination controls
     st.subheader("Select Images to Relabel")
     total = len(valid_images)
-    page_size = st.selectbox("Images per page", options=[24, 36, 48, 60], index=0)
+    page_size = st.selectbox("Images per page",
+                             options=[24, 36, 48, 60],
+                             index=0)
     total_pages = max(1, (total + page_size - 1) // page_size)
-    page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
+    page = st.number_input("Page",
+                           min_value=1,
+                           max_value=total_pages,
+                           value=1,
+                           step=1)
     start = (page - 1) * page_size
     end = min(start + page_size, total)
     page_images = valid_images[start:end]
 
-    st.caption(f"**{total}** image(s) for current filters — page **{page}** of **{total_pages}** (showing {len(page_images)} here)")
+    st.caption(
+        f"**{total}** image(s) for current filters — page **{page}** of **{total_pages}** (showing {len(page_images)} here)"
+    )
 
     # Session state for selection (used by fragment and main form)
     if "selected_images" not in st.session_state:
@@ -276,9 +308,9 @@ def app():
         for idx, img_path in enumerate(page_images):
             with cols[idx % 4]:
                 try:
-                    img_bytes = _load_image_bytes(str(img_path))
-                    if img_bytes is not None:
-                        st.image(img_bytes, use_container_width=True)
+                    img_rgb = _load_image_rgb(str(img_path))
+                    if img_rgb is not None:
+                        st.image(img_rgb, use_container_width=True)
                     else:
                         st.warning(f"Image not found: {img_path.name}")
 
@@ -290,17 +322,22 @@ def app():
                     st.error(f"Error loading image {img_path.name}: {str(e)}")
 
     image_grid_fragment()
-    
+
     # New label selection
     st.subheader("Update Labels")
-    
+
     # Quick action: save selected as FalsePositive (no dropdown)
     if st.session_state.selected_images:
-        st.caption(f"{len(st.session_state.selected_images)} image(s) selected")
-    if st.button("Save selected as FalsePositive", type="primary", key="save_fp_bulk"):
+        st.caption(
+            f"{len(st.session_state.selected_images)} image(s) selected")
+    if st.button("Save selected as FalsePositive",
+                 type="primary",
+                 key="save_fp_bulk"):
         if st.session_state.selected_images:
             mark_review = st.session_state.get("bulk_mark_review", True)
-            n = _save_annotations(list(st.session_state.selected_images), "FalsePositive", mark_review=mark_review)
+            n = _save_annotations(list(st.session_state.selected_images),
+                                  "FalsePositive",
+                                  mark_review=mark_review)
             st.success(f"Marked {n} image(s) as FalsePositive")
             st.session_state.selected_images.clear()
             st.rerun()
@@ -308,12 +345,12 @@ def app():
             st.warning("Select at least one image first")
 
     st.write("Or choose another label:")
-    label_options = ['FalsePositive'] + [f"{s['title']} ({s['scientificName']})" for s in all_species]
-    new_label = st.selectbox(
-        "Select new label for selected images",
-        options=label_options
-    )
-    
+    label_options = ['FalsePositive'] + [
+        f"{s['title']} ({s['scientificName']})" for s in all_species
+    ]
+    new_label = st.selectbox("Select new label for selected images",
+                             options=label_options)
+
     # Option to mark QC as review (persisted for fragment's quick FP save)
     mark_review = st.checkbox(
         "Mark QC as review",
@@ -327,7 +364,9 @@ def app():
         if not st.session_state.selected_images:
             st.warning("Please select at least one image")
         else:
-            n = _save_annotations(list(st.session_state.selected_images), new_label, mark_review=mark_review)
+            n = _save_annotations(list(st.session_state.selected_images),
+                                  new_label,
+                                  mark_review=mark_review)
             st.success(f"Added {n} new annotation(s)")
             st.session_state.selected_images.clear()
             st.rerun()
@@ -338,34 +377,63 @@ def app():
             st.info("No annotations yet.")
         else:
             # Show last 50 edits; use "Species" column names and display names for labels
-            show_df = latest_annotations.sort_values("timestamp", ascending=False).head(50)
+            show_df = latest_annotations.sort_values("timestamp",
+                                                     ascending=False).head(50)
             display_df = show_df.copy()
-            display_df = display_df.rename(columns={"original_label": "Original Species", "new_label": "New Species"})
-            display_df["Original Species"] = display_df["Original Species"].map(lambda s: species_display(s, use_common) if pd.notna(s) else s)
-            display_df["New Species"] = display_df["New Species"].map(lambda s: species_display(s, use_common) if pd.notna(s) else s)
+            display_df = display_df.rename(columns={
+                "original_label": "Original Species",
+                "new_label": "New Species"
+            })
+            display_df["Original Species"] = display_df[
+                "Original Species"].map(lambda s: species_display(
+                    s, use_common) if pd.notna(s) else s)
+            display_df["New Species"] = display_df["New Species"].map(
+                lambda s: species_display(s, use_common) if pd.notna(s) else s)
             st.dataframe(display_df, use_container_width=True)
 
             # Simple revert by image_id (use show_df with original column names)
-            revert_image = st.selectbox("Revert image", options=[""] + show_df["image_id"].astype(str).tolist())
+            revert_image = st.selectbox(
+                "Revert image",
+                options=[""] + show_df["image_id"].astype(str).tolist())
             if revert_image:
-                row = show_df.loc[show_df["image_id"].astype(str) == revert_image].iloc[0]
+                row = show_df.loc[show_df["image_id"].astype(str) ==
+                                  revert_image].iloc[0]
                 # Determine original label to revert to
-                revert_to = row.get("original_label") if pd.notna(row.get("original_label")) else None
+                revert_to = row.get("original_label") if pd.notna(
+                    row.get("original_label")) else None
                 if not revert_to:
                     # Fallback to current predictions label
-                    if revert_image in predictions_df['crop_image_id'].astype(str).values:
-                        revert_to = predictions_df.loc[predictions_df['crop_image_id'].astype(str) == revert_image, 'cropmodel_label'].iloc[0]
+                    if revert_image in predictions_df['crop_image_id'].astype(
+                            str).values:
+                        revert_to = predictions_df.loc[
+                            predictions_df['crop_image_id'].astype(str) ==
+                            revert_image, 'cropmodel_label'].iloc[0]
                 if revert_to:
                     revert_row = {
-                        'image_id': revert_image,
-                        'original_label': predictions_df.loc[predictions_df['crop_image_id'].astype(str) == revert_image, 'cropmodel_label'].iloc[0] if revert_image in predictions_df['crop_image_id'].astype(str).values else row.get('new_label'),
-                        'new_label': revert_to,
-                        'set': 'review' if mark_review else None,
-                        'timestamp': datetime.now().isoformat(),
-                        'user': st.session_state.get('username', 'streamlit_user')
+                        'image_id':
+                        revert_image,
+                        'original_label':
+                        predictions_df.loc[predictions_df['crop_image_id'].
+                                           astype(str) == revert_image,
+                                           'cropmodel_label'].iloc[0]
+                        if revert_image
+                        in predictions_df['crop_image_id'].astype(str).values
+                        else row.get('new_label'),
+                        'new_label':
+                        revert_to,
+                        'set':
+                        'review' if mark_review else None,
+                        'timestamp':
+                        datetime.now().isoformat(),
+                        'user':
+                        st.session_state.get('username', 'streamlit_user')
                     }
-                    annotations_df = pd.concat([annotations_df, pd.DataFrame([revert_row])], ignore_index=True)
-                    annotations_df.to_csv("app/data/annotations.csv", index=False)
+                    annotations_df = pd.concat(
+                        [annotations_df,
+                         pd.DataFrame([revert_row])],
+                        ignore_index=True)
+                    annotations_df.to_csv("app/data/annotations.csv",
+                                          index=False)
                     # Refresh cached annotations on next rerun
                     load_or_create_annotations.clear()
                     st.success(f"Reverted {revert_image} to {revert_to}")
@@ -373,4 +441,4 @@ def app():
 
 if __name__ == "__main__":
     load_css()
-    app() 
+    app()

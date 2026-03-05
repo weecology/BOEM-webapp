@@ -29,6 +29,18 @@ def _load_indices():
     return load_predictions_indices()
 
 
+def _open_image_rgb(image_path: str):
+    """Load image as RGB. Converts BGR→RGB for images saved as BGR (e.g. by OpenCV)."""
+    try:
+        img = Image.open(image_path)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        r, g, b = img.split()
+        return Image.merge("RGB", (b, g, r))
+    except Exception:
+        return None
+
+
 def app():
     require_login()
     st.title("Predictions Viewer")
@@ -113,7 +125,9 @@ def app():
         with cols[idx % 3]:
             try:
                 image_path = f"app/data/images/{row['crop_image_id']}"
-                image = Image.open(image_path)
+                image = _open_image_rgb(image_path)
+                if image is None:
+                    raise FileNotFoundError(image_path)
                 # Show caption only if this image is selected
                 caption_text = row[
                     'crop_image_id'] if st.session_state.selected_image_name == row[
@@ -129,11 +143,12 @@ def app():
     if st.session_state.selected_image_name:
         st.subheader("Selected Image")
         preview_path = f"app/data/images/{st.session_state.selected_image_name}"
-        try:
-            st.image(preview_path,
+        preview_img = _open_image_rgb(preview_path)
+        if preview_img is not None:
+            st.image(preview_img,
                      caption=st.session_state.selected_image_name,
                      use_container_width=True)
-        except Exception:
+        else:
             st.info(
                 f"Selected image not found: {st.session_state.selected_image_name}"
             )
