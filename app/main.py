@@ -113,7 +113,6 @@ st.caption(f"Aerial surveys: {df['flight_name'].nunique()}")
 
 # Model performance (held-out evaluation data)
 st.markdown("### Model performance")
-st.caption("Metrics on images not used for training. Recall = proportion of true objects detected; precision = proportion of predictions that are correct.")
 det_loaded, cls_loaded = False, False
 try:
     detection_metrics_df = pd.read_csv("app/data/detection_model_metrics.csv")
@@ -132,13 +131,13 @@ if det_loaded or cls_loaded:
             latest = detection_metrics_df.sort_values("timestamp").groupby("metricName").last()
             st.markdown("**Detection**")
             if "box_recall" in latest.index:
-                st.metric("Recall", f"{latest.loc['box_recall', 'metricValue'] * 100:.1f}%")
+                st.metric("Recall (proportion of true objects correctly detected)", f"{latest.loc['box_recall', 'metricValue'] * 100:.1f}%")
             if "box_precision" in latest.index:
-                st.metric("Precision", f"{latest.loc['box_precision', 'metricValue'] * 100:.1f}%")
+                st.metric("Precision (proportion of predictions that are correct)", f"{latest.loc['box_precision', 'metricValue'] * 100:.1f}%")
             if "empty-frame-precision" in latest.index:
                 st.caption(f"Empty-frame precision: {latest.loc['empty-frame-precision', 'metricValue'] * 100:.1f}%")
             if "empty_frame_accuracy" in latest.index:
-                st.caption(f"Empty-frame accuracy: {latest.loc['empty_frame_accuracy', 'metricValue'] * 100:.1f}%")
+                st.caption(f"Empty-frame accuracy (proportion of images correctly identified as empty): {latest.loc['empty_frame_accuracy', 'metricValue'] * 100:.1f}%")
             try:
                 det_exp = detection_metrics_df.sort_values("timestamp").iloc[-1]["experiment"]
                 st.markdown(f'<a href="https://www.comet.com/bw4sz/boem/{det_exp}" target="_blank">View detection experiment in Comet →</a>', unsafe_allow_html=True)
@@ -148,15 +147,14 @@ if det_loaded or cls_loaded:
         if cls_loaded:
             latest = classification_metrics_df.sort_values("timestamp").groupby("metricName").last()
             st.markdown("**Classification**")
-            # Classification experiments log "Micro-Average Accuracy" / "Micro-Average Precision", not "Accuracy"/"Precision"
             if "Micro-Average Accuracy" in latest.index:
                 st.metric("Micro-Average Accuracy", f"{latest.loc['Micro-Average Accuracy', 'metricValue'] * 100:.1f}%")
             elif "Accuracy" in latest.index:
-                st.metric("Accuracy", f"{latest.loc['Accuracy', 'metricValue'] * 100:.1f}%")
-            if "Micro-Average Precision" in latest.index:
-                st.metric("Micro-Average Precision", f"{latest.loc['Micro-Average Precision', 'metricValue'] * 100:.1f}%")
-            elif "Precision" in latest.index:
-                st.metric("Precision", f"{latest.loc['Precision', 'metricValue'] * 100:.1f}%")
+                st.metric("Micro-Average Accuracy", f"{latest.loc['Accuracy', 'metricValue'] * 100:.1f}%")
+            if "Macro-Average Precision" in latest.index:
+                st.metric("Macro-Average Precision", f"{latest.loc['Macro-Average Precision', 'metricValue'] * 100:.1f}%")
+            elif "Macro-Average Accuracy" in latest.index:
+                st.metric("Macro-Average Accuracy", f"{latest.loc['Macro-Average Accuracy', 'metricValue'] * 100:.1f}%")
             try:
                 last_row = classification_metrics_df.sort_values("timestamp").iloc[-1]
                 exp_key = last_row.get("experimentKey", None)
