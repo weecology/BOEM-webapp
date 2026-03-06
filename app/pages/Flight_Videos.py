@@ -10,8 +10,10 @@ VIDEOS_DIR = Path(__file__).resolve().parents[1] / "data" / "videos"
 
 
 @st.cache_data
-def _flight_list():
-    """Flight list from predictions index or fallback to empty (user should run prepare.py)."""
+def _flight_list(_indices_mtime: float = 0):
+    """Flight list from predictions index (Gulf-only when built by prepare.py).
+    _indices_mtime is used only to invalidate cache when app/data/predictions_indices.json is updated (e.g. after deploy).
+    """
     indices = load_predictions_indices()
     if indices and indices.get("flight_list"):
         return indices["flight_list"]
@@ -30,7 +32,10 @@ def app():
         The result is a shorter flythrough video focused on frames where the model detected wildlife.
         """)
 
-    flights = _flight_list()
+    # Invalidate cache when predictions_indices.json is updated (e.g. after deploy or re-running prepare.py)
+    indices_path = Path(__file__).resolve().parents[1] / "data" / "predictions_indices.json"
+    indices_mtime = indices_path.stat().st_mtime if indices_path.exists() else 0.0
+    flights = _flight_list(_indices_mtime=indices_mtime)
     if not flights:
         st.warning("No flights in the predictions index. Run **prepare.py** to load data and download videos.")
         return
@@ -45,7 +50,7 @@ def app():
     if not selected:
         return
 
-    video_filename = f"{selected}_flythrough.avi"
+    video_filename = f"{selected}_flythrough.mp4"
     video_path = VIDEOS_DIR / video_filename
     if not video_path.exists():
         st.info(
@@ -55,7 +60,7 @@ def app():
         return
 
     st.video(str(video_path))
-    st.caption(f"**{selected}** — detection flythrough (`.avi`).")
+    st.caption(f"**{selected}** — detection flythrough (`.mp4`).")
 
     with open(video_path, "rb") as f:
         video_bytes = f.read()
@@ -63,7 +68,7 @@ def app():
         label="Download video",
         data=video_bytes,
         file_name=video_filename,
-        mime="video/x-msvideo",
+        mime="video/mp4",
         key="flight_video_download",
     )
 

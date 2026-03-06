@@ -114,4 +114,5 @@ Thumbs.db
 *.cache/*
 *.comet.config
 app/data/videos/
+app/data/reports/
 

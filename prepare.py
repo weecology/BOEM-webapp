@@ -244,4 +244,8 @@ if __name__ == '__main__':
     )
     comet_utils.download_flythrough_videos(flight_to_experiment, save_dir="app/data/videos")
 
+    # --- 10. Flight reports (transect map, report PDF, shapefiles, etc.) ---
+    print("[10/10] Downloading flight reports...")
+    comet_utils.download_flight_reports(flight_to_experiment, save_dir="app/data/reports")
+
     print("\nDone.\n")

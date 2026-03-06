@@ -1,4 +1,11 @@
-"""Load pre-computed prediction indices for faster Streamlit filtering."""
+"""Load pre-computed prediction indices for faster Streamlit filtering.
+
+predictions_indices.json is built by prepare.py from Gulf-only predictions
+(see gulf_flights.txt). On the web server, deploy an up-to-date copy of
+app/data/predictions_indices.json (and most_recent_all_flight_predictions.csv)
+so the flight dropdowns show only Gulf flights; otherwise delete the old
+predictions_indices.json and re-run prepare.py on the server.
+"""
 from pathlib import Path
 import json
 from typing import Optional

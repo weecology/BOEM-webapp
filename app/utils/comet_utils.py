@@ -72,22 +72,26 @@ def get_all_comet_metrics():
             flight_name = exp.get_parameters_summary("flight_name")["valueCurrent"]
         except Exception:
             flight_name = None
-        if gulf_basenames:
-            if not flight_name:
-                continue
-            if _flight_basename(flight_name) not in gulf_basenames:
-                continue
 
+        # Detection and classification are not flight-specific: include all such experiments
         if is_detection:
             detection_experiments.append((exp, flight_name))
         if is_classification:
             classification_experiments.append((exp, flight_name))
-        if is_pipeline and flight_name:
-            exp_ts = getattr(exp, 'start_server_timestamp', None) or 0
-            if flight_name not in latest_pipeline_by_flight or exp_ts > getattr(
-                latest_pipeline_by_flight[flight_name], 'start_server_timestamp', None
-            ) or 0:
-                latest_pipeline_by_flight[flight_name] = exp
+
+        # Gulf filter applies ONLY to pipeline (pipeline is per-flight)
+        if not is_pipeline or not flight_name:
+            continue
+        if gulf_basenames and _flight_basename(flight_name) not in gulf_basenames:
+            continue
+        exp_ts = getattr(exp, 'start_server_timestamp', None) or 0
+        if flight_name not in latest_pipeline_by_flight or exp_ts > getattr(
+            latest_pipeline_by_flight[flight_name], 'start_server_timestamp', None
+        ) or 0:
+            latest_pipeline_by_flight[flight_name] = exp
+
+    print(f"  After filtering: pipeline (latest per flight)=%d, detection=%d, classification=%d" % (
+        len(latest_pipeline_by_flight), len(detection_experiments), len(classification_experiments)))
 
     DETECTION_METRICS = [
         "box_recall", "box_precision", "empty_frame_accuracy",
@@ -102,9 +106,21 @@ def get_all_comet_metrics():
     classification_val_counts = []
     all_predictions = []
 
+    def _normalize_metric_name(name):
+        """Normalize for matching: lowercase, spaces/hyphens/slashes to underscores."""
+        if not name or not isinstance(name, str):
+            return ""
+        return name.lower().strip().replace(" ", "_").replace("-", "_").replace("/", "_")
+
     def _process_metrics(exp, flight_name, mdf, metrics_to_track):
         if metrics_to_track:
-            mdf = mdf[mdf["metricName"].isin(metrics_to_track)]
+            # Match exactly or via normalized name (Comet UI may show "Zero Shot Evaluation Box Precision")
+            canonical = {_normalize_metric_name(m): m for m in metrics_to_track}
+            normalized = mdf["metricName"].apply(_normalize_metric_name)
+            keep = normalized.isin(canonical)
+            mdf = mdf.loc[keep].copy()
+            if not mdf.empty:
+                mdf["metricName"] = normalized[keep].map(canonical)
         if mdf.empty:
             return None
         mdf = (mdf.sort_values(by='timestamp', ascending=False)
@@ -358,3 +374,63 @@ def download_flythrough_videos(flight_to_experiment, save_dir="app/data/videos")
             print(f"    Saved to {out_path}")
         except Exception as e:
             print(f"    Failed to download {flight_name}_flythrough.mp4: {e}")
+
+
+def download_flight_reports(flight_to_experiment, save_dir="app/data/reports"):
+    """Download the latest report assets per flight from Comet (folder containing transect_map.html, report.pdf, etc.).
+    Uses the same experiment mapping as flythrough videos. Saves each flight's report folder under save_dir/flight_name/.
+    """
+    if not flight_to_experiment:
+        return
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    api = API(api_key=os.getenv("COMET_API_KEY"))
+    workspace = os.getenv("COMET_WORKSPACE")
+
+    for flight_name, experiment_name in flight_to_experiment.items():
+        out_dir = save_dir / flight_name
+        try:
+            experiment = api.get(f"{workspace}/boem", experiment=experiment_name)
+            assets = experiment.get_asset_list()
+            # Find report folder: asset with transect_map.html (path may be "folder/transect_map.html" or "others/folder/transect_map.html")
+            report_prefix = None
+            for a in assets:
+                fname = (a.get("fileName") or a.get("filePath") or "").strip()
+                if "transect_map.html" in fname:
+                    # Use the directory containing transect_map.html as the report folder
+                    if "/" in fname:
+                        report_prefix = fname.rsplit("/", 1)[0] + "/"
+                    else:
+                        report_prefix = ""
+                    break
+            if not report_prefix:
+                print(f"  No report folder (transect_map.html) in {experiment_name}, skipping.")
+                continue
+            # Download all assets under that prefix
+            to_download = [
+                a for a in assets
+                if (a.get("fileName") or a.get("filePath") or "").startswith(report_prefix)
+            ]
+            if not to_download:
+                print(f"  No assets under report folder in {experiment_name}, skipping.")
+                continue
+            out_dir.mkdir(parents=True, exist_ok=True)
+            for a in to_download:
+                fname = (a.get("fileName") or a.get("filePath") or "").strip()
+                if "/" in fname:
+                    rel_path = fname[len(report_prefix):] or fname.split("/")[-1]
+                else:
+                    rel_path = fname
+                if not rel_path:
+                    continue
+                out_path = out_dir / rel_path
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    data = experiment.get_asset(a["assetId"])
+                    with open(out_path, "wb") as f:
+                        f.write(data)
+                except Exception as e:
+                    print(f"    Failed to download {rel_path}: {e}")
+            print(f"  Downloaded report for {flight_name} to {out_dir} ({len(to_download)} files)")
+        except Exception as e:
+            print(f"  Failed to download report for {flight_name}: {e}")
