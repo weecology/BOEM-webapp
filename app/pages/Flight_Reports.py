@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 from pathlib import Path
 import zipfile
@@ -8,6 +9,7 @@ from utils.indices import load_predictions_indices
 
 
 REPORTS_DIR = Path(__file__).resolve().parents[1] / "data" / "reports"
+DEFAULT_FLIGHT = "JPG_20260202_122400"
 
 
 @st.cache_data
@@ -42,9 +44,11 @@ def app():
         st.warning("No flights in the predictions index. Run **prepare.py** to load data and download reports.")
         return
 
+    default_index = flights.index(DEFAULT_FLIGHT) if DEFAULT_FLIGHT in flights else 0
     selected = st.selectbox(
         "Flight",
         options=flights,
+        index=default_index,
         format_func=lambda x: x,
         key="flight_report_select",
         help="Choose a flight to view its report and transect map.",
@@ -69,6 +73,13 @@ def app():
         st.subheader("Transect map")
         try:
             html_content = html_path.read_text(encoding="utf-8", errors="replace")
+            # Zoom out: reduce Leaflet initial zoom by 2 (e.g. 10 -> 8)
+            html_content = re.sub(
+                r'"zoom":\s*(\d+)',
+                lambda m: f'"zoom": {max(0, int(m.group(1)) - 2)}',
+                html_content,
+                count=1,
+            )
             st.components.v1.html(html_content, height=700, scrolling=True)
         except Exception as e:
             st.error(f"Could not render map: {e}")
