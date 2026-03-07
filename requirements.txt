@@ -1,4 +1,6 @@
 streamlit
+pydeck
+h3
 leafmap
 rasterio
 rio-cogeo
