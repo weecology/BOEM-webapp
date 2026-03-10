@@ -115,6 +115,41 @@ For support:
 - Open an issue in the repository
 - Contact the project maintainers
 
+
+Developer docs: Boem webapp
+
+Overview
+- Environment: conda env named boem-webapp
+- Code location: /pgsql/boem-webapp/BOEM-webapp
+- Service: systemd unit boem-webapp.service
+- Dependency guard: boem-ensure-deps.sh runs before start and updates Python requirements only when requirements.txt changes, storing the current hash at /var/lib/boem-webapp/requirements.sha256
+
+Cheat sheet (run from the repo directory)
+```j
+cd /pgsql/boem-webapp/BOEM-webapp/
+
+# Activate the app environment
+conda activate boem-webapp
+
+# Prepare data
+python prepare.py
+# or
+sh prepare_data.sh
+
+# Manage the service
+sudo systemctl daemon-reload        # after editing the unit file
+sudo systemctl stop boem-webapp.service        # to stop service
+sudo systemctl restart boem-webapp.service
+
+# Ensure the pre-start script is executable
+sudo chmod +x boem-ensure-deps.sh
+
+# Verify the service file if needed
+sudoedit /etc/systemd/system/boem-webapp.service
+```
+
+
+
 ## 📜 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
