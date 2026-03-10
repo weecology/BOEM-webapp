@@ -116,7 +116,7 @@ For support:
 - Contact the project maintainers
 
 
-Developer docs: Boem webapp
+## 🛠️ Developer docs: Boem webapp
 
 Overview
 - Environment: conda env named boem-webapp
