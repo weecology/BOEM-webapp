@@ -3905,7 +3905,7 @@ C7_L1_F497_T20241219_124030_575_Bucephala albeola_9.png,Bucephala albeola,FalseP
 C7_L1_F466_T20241220_152252_058_Bucephala albeola_36.png,Bucephala albeola,Northern Gannet (Morus bassanus) (Morus bassanus),2026-03-04T14:03:41.871081,local_dev,review
 C1_L1_F585_T20241219_151555_915_Anas strepera_648.png,Anas strepera,FalsePositive,2026-03-04T15:54:12.878806,local_dev,review
 C6_L3_F2670_T20260201_144222_270_Gavia immer_205.png,Gavia immer,FalsePositive,2026-03-04T19:23:54.100575,local_dev,review
-<<<<<<< HEAD
+<<<<<<< HEAD,,,,,
 C4_L4_F3017_T20241220_120112_220_Bucephala clangula_592.png,Bucephala clangula,Gadwall (Anas strepera) (Anas strepera),2026-03-04T20:28:40.396343,local_dev,review
 C4_L4_F3017_T20241220_120112_220_Bucephala clangula_590.png,Bucephala clangula,Gadwall (Anas strepera) (Anas strepera),2026-03-04T20:28:40.398462,local_dev,review
 C4_L4_F3017_T20241220_120112_220_Bucephala clangula_586.png,Bucephala clangula,Gadwall (Anas strepera) (Anas strepera),2026-03-04T20:28:40.399806,local_dev,review
@@ -3925,8 +3925,8 @@ C4_L4_F3017_T20241220_120112_220_Bucephala clangula_594.png,Bucephala clangula,F
 C4_L4_F3017_T20241220_120112_220_Bucephala clangula_589.png,Bucephala clangula,FalsePositive,2026-03-04T20:29:58.548254,local_dev,review
 C4_L4_F3017_T20241220_120112_220_Bucephala clangula_588.png,Bucephala clangula,FalsePositive,2026-03-04T20:29:58.550044,local_dev,review
 C4_L4_F3017_T20241220_120112_220_Bucephala clangula_593.png,Bucephala clangula,FalsePositive,2026-03-04T20:29:58.552053,local_dev,review
-=======
->>>>>>> 39e23dd3b6b6fda3839a5af12a8a7dcc7fa9247f
+=======,,,,,
+>>>>>>> 39e23dd3b6b6fda3839a5af12a8a7dcc7fa9247f,,,,,
 C4_L3_F2514_T20241220_115355_527_16_2201.png,16,FalsePositive,2026-03-05T11:02:32.898253,BOEM-user,review
 C2_L6_F4316_T20241220_122059_289_16_2199.png,16,FalsePositive,2026-03-05T11:02:32.913534,BOEM-user,review
 C2_L1_F447_T20241220_112138_671_19_2200.png,19,FalsePositive,2026-03-05T11:03:04.316388,BOEM-user,review
@@ -4207,8 +4207,8 @@ C3_L7_F3633_T20250827_110017_576_Alle alle_921.png,Alle alle,FalsePositive,2026-
 C3_L2_F1673_T20250827_144912_861_Alle alle_1152.png,Alle alle,FalsePositive,2026-03-05T11:19:49.424893,BOEM-user,review
 C7_L8_F991_T20230616_134831_793_Alle alle_2717.png,Alle alle,FalsePositive,2026-03-05T11:19:49.476771,BOEM-user,review
 C1_L2_F534_T20250827_113517_605_Alle alle_145.png,Alle alle,FalsePositive,2026-03-05T11:19:49.526778,BOEM-user,review
-<<<<<<< HEAD
-=======
+<<<<<<< HEAD,,,,,
+=======,,,,,
 C2_L2_F47_T20230910_134157_490_Alle alle_86.png,Alle alle,FalsePositive,2026-03-05T11:21:17.653402,BOEM-user,review
 C4_L15_F2847_T20230616_142216_043_Alle alle_4385.png,Alle alle,FalsePositive,2026-03-05T11:21:17.699757,BOEM-user,review
 C3_L6_F806_T20230911_113341_368_Alle alle_1186.png,Alle alle,FalsePositive,2026-03-05T11:21:17.744914,BOEM-user,review
@@ -5341,4 +5341,8 @@ C3_L4_F2540_T20240131_123615_955_Tursiops truncatus_782.png,Tursiops truncatus,F
 C3_L20_F4329_T20230621_145416_268_Tursiops truncatus_1997.png,Tursiops truncatus,FalsePositive,2026-03-05T18:37:58.374555,BOEM-user,review
 C6_L9_F6076_T20210324_144701_319_Tursiops truncatus_6812.png,Tursiops truncatus,FalsePositive,2026-03-05T18:37:58.390642,BOEM-user,review
 C6_L2_F598_T20241107_153618_922_Tursiops truncatus_156.png,Tursiops truncatus,FalsePositive,2026-03-05T18:37:58.406416,BOEM-user,review
->>>>>>> 39e23dd3b6b6fda3839a5af12a8a7dcc7fa9247f
+>>>>>>> 39e23dd3b6b6fda3839a5af12a8a7dcc7fa9247f,,,,,
+C6_L3_F2681_T20260201_144230_122_Halichoerus grypus_18.png,Halichoerus grypus,FalsePositive,2026-03-10T15:41:23.902138,BOEM-user,review
+C7_L1_F46_T20260201_135739_570_Halichoerus grypus_430.png,Halichoerus grypus,FalsePositive,2026-03-10T15:41:23.902688,BOEM-user,review
+C7_L1_F46_T20260201_135739_570_Halichoerus grypus_431.png,Halichoerus grypus,FalsePositive,2026-03-10T15:41:23.903199,BOEM-user,review
+C6_L4_F4099_T20260202_154731_610_Halichoerus grypus_180.png,Halichoerus grypus,FalsePositive,2026-03-10T15:41:23.903680,BOEM-user,review
