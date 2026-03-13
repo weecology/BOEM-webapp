@@ -3925,8 +3925,6 @@ C4_L4_F3017_T20241220_120112_220_Bucephala clangula_594.png,Bucephala clangula,F
 C4_L4_F3017_T20241220_120112_220_Bucephala clangula_589.png,Bucephala clangula,FalsePositive,2026-03-04T20:29:58.548254,local_dev,review
 C4_L4_F3017_T20241220_120112_220_Bucephala clangula_588.png,Bucephala clangula,FalsePositive,2026-03-04T20:29:58.550044,local_dev,review
 C4_L4_F3017_T20241220_120112_220_Bucephala clangula_593.png,Bucephala clangula,FalsePositive,2026-03-04T20:29:58.552053,local_dev,review
-=======,,,,,
->>>>>>> 39e23dd3b6b6fda3839a5af12a8a7dcc7fa9247f,,,,,
 C4_L3_F2514_T20241220_115355_527_16_2201.png,16,FalsePositive,2026-03-05T11:02:32.898253,BOEM-user,review
 C2_L6_F4316_T20241220_122059_289_16_2199.png,16,FalsePositive,2026-03-05T11:02:32.913534,BOEM-user,review
 C2_L1_F447_T20241220_112138_671_19_2200.png,19,FalsePositive,2026-03-05T11:03:04.316388,BOEM-user,review
@@ -5353,3 +5351,7 @@ C7_L7_F8424_T20260202_165845_722_Phoca vitulina_34.png,Phoca vitulina,Brown Peli
 C7_L7_F8424_T20260202_165845_722_Phoca vitulina_34.png,Phoca vitulina,Red-Breasted Merganser (Mergus serrator) (Mergus serrator),2026-03-13T12:14:43.148365,local_dev,review
 C2_L7_F7168_T20260202_164347_393_Pelecanus occidentalis_320.png,Pelecanus occidentalis,Red-Breasted Merganser (Mergus serrator) (Mergus serrator),2026-03-13T12:14:43.149814,local_dev,review
 C1_L7_F8294_T20260202_165712_496_Larus argentatus_356.png,Larus argentatus,Brown Pelican (Pelecanus occidentalis) (Pelecanus occidentalis),2026-03-13T12:15:35.186571,local_dev,review
+C6_L3_F2681_T20260201_144230_122_Halichoerus grypus_18.png,Halichoerus grypus,FalsePositive,2026-03-10T15:41:23.902138,BOEM-user,review
+C7_L1_F46_T20260201_135739_570_Halichoerus grypus_430.png,Halichoerus grypus,FalsePositive,2026-03-10T15:41:23.902688,BOEM-user,review
+C7_L1_F46_T20260201_135739_570_Halichoerus grypus_431.png,Halichoerus grypus,FalsePositive,2026-03-10T15:41:23.903199,BOEM-user,review
+C6_L4_F4099_T20260202_154731_610_Halichoerus grypus_180.png,Halichoerus grypus,FalsePositive,2026-03-10T15:41:23.903680,BOEM-user,review
