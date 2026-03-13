@@ -314,6 +314,19 @@ def app():
                     else:
                         st.warning(f"Image not found: {img_path.name}")
 
+                    # Show current label beneath each image so users can
+                    # quickly see what it's currently labeled as.
+                    img_id = img_path.name
+                    row = predictions_df.loc[
+                        predictions_df["crop_image_id"].astype(str) == img_id
+                    ]
+                    if not row.empty:
+                        current_label = row["cropmodel_label"].iloc[0]
+                        label_display = species_display(current_label, use_common)
+                        st.caption(f"Label: {label_display}")
+                    else:
+                        st.caption("Label: (unknown)")
+
                     if st.checkbox("Select", key=f"select_{img_path.name}"):
                         st.session_state.selected_images.add(img_path.name)
                     else:
