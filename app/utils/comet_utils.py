@@ -58,6 +58,11 @@ def get_all_comet_metrics():
     detection_experiments = []   # (exp, flight_name)
     classification_experiments = []
     latest_pipeline_by_flight = {}  # flight_name -> exp (max start_server_timestamp)
+    excluded_by_gulf_filter = []  # [{flight_name, experiment, reason}] — pipeline
+                                   # experiments dropped because their flight
+                                   # basename isn't in gulf_flights.txt. This
+                                   # list used to be discarded silently.
+    skipped_archived_or_running = []
 
     for exp in experiments:
         tags = exp.get_tags()
@@ -67,6 +72,8 @@ def get_all_comet_metrics():
         if not (is_pipeline or is_detection or is_classification):
             continue
         if exp.archived or exp.get_state() == 'running':
+            if is_pipeline:
+                skipped_archived_or_running.append(exp.name)
             continue
         try:
             flight_name = exp.get_parameters_summary("flight_name")["valueCurrent"]
@@ -83,6 +90,11 @@ def get_all_comet_metrics():
         if not is_pipeline or not flight_name:
             continue
         if gulf_basenames and _flight_basename(flight_name) not in gulf_basenames:
+            excluded_by_gulf_filter.append({
+                "flight_name": flight_name,
+                "flight_basename": _flight_basename(flight_name),
+                "experiment": exp.name,
+            })
             continue
         exp_ts = getattr(exp, 'start_server_timestamp', None) or 0
         if flight_name not in latest_pipeline_by_flight or exp_ts > getattr(
@@ -92,6 +104,15 @@ def get_all_comet_metrics():
 
     print(f"  After filtering: pipeline (latest per flight)=%d, detection=%d, classification=%d" % (
         len(latest_pipeline_by_flight), len(detection_experiments), len(classification_experiments)))
+    if excluded_by_gulf_filter:
+        excluded_basenames = sorted({e["flight_basename"] for e in excluded_by_gulf_filter})
+        print(f"  ⚠ {len(excluded_basenames)} flight(s) present in Comet but NOT in "
+              f"{GULF_FLIGHTS_PATH} — excluded from the app: {excluded_basenames}")
+        print(f"    If any of these are real Gulf flights that should be showing up, "
+              f"add their basename to {GULF_FLIGHTS_PATH} and re-run.")
+    if skipped_archived_or_running:
+        print(f"  {len(skipped_archived_or_running)} pipeline experiment(s) skipped "
+              f"(archived or still running): {sorted(set(skipped_archived_or_running))}")
 
     DETECTION_METRICS = [
         "box_recall", "box_precision", "empty_frame_accuracy",
@@ -265,6 +286,10 @@ def get_all_comet_metrics():
     print("Done: detection=%d rows, classification=%d rows, pipeline=%d rows, predictions=%d rows." % (
         len(results['detection']), len(results['classification']),
         len(results['pipeline']), len(results['predictions'])))
+
+    results['excluded_by_gulf_filter'] = excluded_by_gulf_filter
+    results['skipped_archived_or_running'] = sorted(set(skipped_archived_or_running))
+    results['comet_experiments_total'] = len(experiments)
     return results
 
 def _has_coords_in_df(df):
