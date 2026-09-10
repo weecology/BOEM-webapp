@@ -115,4 +115,5 @@ Thumbs.db
 *.comet.config
 app/data/videos/
 app/data/reports/
+app/data/logs/
 

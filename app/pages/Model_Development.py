@@ -3,9 +3,13 @@ from utils.styling import load_css
 import pandas as pd
 import plotly.express as px
 from utils.taxonomy import species_display, get_scientific_to_common
+from utils.auth import require_login
+from utils.nav import render_sidebar_nav
 
 
 def app():
+    render_sidebar_nav()
+    require_login()  # internal tool — was missing this gate; every other internal/public page already requires login
     st.header("Model Development")
     st.text("Machine learning models are developed in collaboration with the University of Florida. The detection model identifies objects of interest, and the classification model classifies them to the finest level of detail possible. A single backbone model is trained on the entire dataset and additional data from the ecological monitoring community.")
     show_trend = st.checkbox("Show trend line on metric plots", value=False, help="Add a linear (OLS) trend line to scatter plots; minimal performance impact.")

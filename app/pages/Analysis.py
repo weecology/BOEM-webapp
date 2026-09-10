@@ -7,10 +7,18 @@ import h3
 from utils.styling import load_css
 from utils.annotations import load_annotations, apply_annotations, apply_annotations_to_gdf, ensure_human_labeled
 import geopandas as gpd
-from utils.auth import require_login
 from utils.taxonomy import species_display
+from utils.indices import load_predictions_indices
+from utils.species_colors import build_species_rank, color_discrete_map, CHART_DISTINCT_LIMIT, render_color_legend
+from utils.nav import render_sidebar_nav
 
-def create_label_count_plots(label_counts_df, use_common_names=True):
+@st.cache_data
+def _load_predictions_gdf(path):
+    """Cached shapefile read — avoids re-parsing the shapefile on every slider interaction."""
+    return gpd.read_file(path)
+
+
+def create_label_count_plots(label_counts_df, use_common_names=True, species_rank=None):
     """Create plots showing label distributions. Species shown as common or scientific name."""
     if label_counts_df is None:
         return None
@@ -27,12 +35,15 @@ def create_label_count_plots(label_counts_df, use_common_names=True):
                           'Species': 'Species',
                           'count': 'Number of Instances',
                       },
+                      color='Species',
+                      color_discrete_map=color_discrete_map(counts_df['label'], counts_df['Species'], species_rank or [], CHART_DISTINCT_LIMIT),
                       category_orders={"Species": label_order.tolist()})
+    fig_hist.update_layout(showlegend=False)  # shared swatch legend is rendered separately
     return fig_hist
 
 
 def app():
-    require_login()
+    render_sidebar_nav()
     use_common = st.session_state.get("use_common_names", True)
     st.title("Species Analysis")
 
@@ -87,7 +98,7 @@ def app():
                                      format='%Y%m%d',
                                      errors='coerce')
     df["timestamp"] = datetime_values.astype(str)
-    gdf = gpd.read_file(default_file.parent / "all_predictions.shp")
+    gdf = _load_predictions_gdf(default_file.parent / "all_predictions.shp")
     gdf['date'] = pd.to_datetime(gdf['timestamp'], errors='coerce')
 
     # Normalize shapefile column names (ESRI truncates to 10 chars)
@@ -230,7 +241,10 @@ def app():
             st.exception(e)
 
     st.subheader("Predicted Species")
-    hist_plot = create_label_count_plots(df, use_common)
+    species_rank = build_species_rank(load_predictions_indices() or {})
+    st.caption(f"Species colors — the {CHART_DISTINCT_LIMIT} most-observed species each get a fixed color (shared with the map); every other species shares the gray 'Other' color below:")
+    render_color_legend(species_rank, CHART_DISTINCT_LIMIT, use_common)
+    hist_plot = create_label_count_plots(df, use_common, species_rank)
     st.plotly_chart(hist_plot, use_container_width=True)
     species_table = df.groupby('cropmodel_label').size().sort_values(
         ascending=False).reset_index(name='count')
@@ -261,7 +275,10 @@ def app():
                 labels={
                     'Species': 'Species',
                     'count': 'Number of Instances'
-                })
+                },
+                color='Species',
+                color_discrete_map=color_discrete_map(rare_counts['label'], rare_counts['Species'], species_rank, CHART_DISTINCT_LIMIT))
+            rare_fig.update_layout(showlegend=False)
             st.plotly_chart(rare_fig, use_container_width=True)
         else:
             st.info(
@@ -287,7 +304,10 @@ def app():
                               labels={
                                   'Species': 'Species',
                                   'count': 'Number of Instances'
-                              })
+                              },
+                              color='Species',
+                              color_discrete_map=color_discrete_map(reviewed_counts['label'], reviewed_counts['Species'], species_rank, CHART_DISTINCT_LIMIT))
+        reviewed_fig.update_layout(showlegend=False)
         st.plotly_chart(reviewed_fig, use_container_width=True)
         max_count = reviewed_species_counts.iloc[0]
         rare_threshold = max_count * 0.10
@@ -312,7 +332,10 @@ def app():
                 labels={
                     'Species': 'Species',
                     'count': 'Human-Reviewed Count'
-                })
+                },
+                color='Species',
+                color_discrete_map=color_discrete_map(rare_counts['label'], rare_counts['Species'], species_rank, CHART_DISTINCT_LIMIT))
+            rare_fig.update_layout(showlegend=False)
             st.plotly_chart(rare_fig, use_container_width=True)
         else:
             st.info(

@@ -6,6 +6,8 @@ app/data/predictions_indices.json (and most_recent_all_flight_predictions.csv)
 so the flight dropdowns show only Gulf flights; otherwise delete the old
 predictions_indices.json and re-run prepare.py on the server.
 """
+from __future__ import annotations  # allows `str | Path`-style hints on Python 3.9
+
 from pathlib import Path
 import json
 from typing import Optional

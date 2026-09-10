@@ -76,19 +76,24 @@ To add or remove flights, edit `app/data/gulf_flights.txt` and re-run `prepare.p
 ```
 BOEM-webapp/
 ├── app/
-│   ├── main.py              # Main application entry point
-│   ├── pages/              
-│   │   ├── Model_Development.py
-│   │   ├── Observations.py
-│   │   ├── Video.py
-│   │   └── ...
+│   ├── main.py                     # Landing page: overview map + observations
+│   ├── pages/
+│   │   ├── Analysis.py             # Species Analysis — abundance plots, tables
+│   │   ├── Image_viewer.py         # Predictions Viewer — browse detection crops
+│   │   ├── Flight_Reports.py       # Per-flight report PDFs / transect maps
+│   │   ├── Flight_Videos.py        # Flythrough videos per flight
+│   │   ├── Model_Development.py    # Internal: detection/classification metrics
+│   │   └── Bulk_Labeling.py        # Internal: bulk review/labeling tool
 │   └── utils/
-│       └── vector_utils.py
-├── .env                    # Environment configuration
-├── .vscode/
-│   └── launch.json        # VS Code debug configuration
-├── prepare.py             # Data preparation script
-├── requirements.txt       # Python dependencies
+│       ├── comet_utils.py          # Comet API pulls (metrics, crops, videos, reports)
+│       ├── vector_utils.py
+│       └── ...
+├── .env                    # Environment configuration (see .env.template)
+├── .streamlit/
+│   └── config.toml         # Streamlit app config
+├── prepare.py              # Data preparation script (pulls from Comet)
+├── prepare_data.sh         # Cron entry point: git pull + prepare.py on the production host
+├── requirements.txt        # Python dependencies
 └── README.md
 ```
 

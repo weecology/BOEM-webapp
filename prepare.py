@@ -1,5 +1,6 @@
 from app.utils import comet_utils
 from app.utils.annotations import load_annotations, apply_annotations, ensure_human_labeled
+from app.utils.run_log import RunLog
 from extract_coordinates import extract_flight_coordinates, generate_metadata
 import pandas as pd
 
@@ -101,16 +102,39 @@ def clear_crop_images():
 
 
 if __name__ == '__main__':
+  with RunLog() as run:
     # --- 1. Download newest metrics and predictions from Comet ---
     print("\n[1/10] Downloading metrics and predictions from Comet...")
-    comet_utils.get_all_comet_metrics()
+    with run.step("comet_download"):
+        comet_results = comet_utils.get_all_comet_metrics()
+    excluded = comet_results.get('excluded_by_gulf_filter', [])
+    run.counts["comet_experiments_total"] = comet_results.get('comet_experiments_total')
+    run.counts["flights_excluded_by_gulf_filter"] = sorted({
+        e["flight_basename"] for e in excluded
+    })
+    run.counts["experiments_excluded_by_gulf_filter"] = excluded
+    run.counts["pipeline_skipped_archived_or_running"] = comet_results.get(
+        'skipped_archived_or_running', [])
+    if excluded:
+        run.warn(
+            f"{len(run.counts['flights_excluded_by_gulf_filter'])} flight(s) "
+            f"found in Comet but not in app/data/gulf_flights.txt — see "
+            f"counts.flights_excluded_by_gulf_filter in this run's log entry."
+        )
 
     # --- 2. Load latest predictions (already Gulf-only from Comet) ---
     print("[2/10] Loading latest predictions...")
     latest_predictions = pd.read_csv(
         "app/data/most_recent_all_flight_predictions.csv")
+    run.counts["latest_predictions_rows"] = len(latest_predictions)
+    run.counts["latest_predictions_flights"] = (
+        sorted(latest_predictions['flight_name'].dropna().unique().tolist())
+        if 'flight_name' in latest_predictions.columns else []
+    )
     if latest_predictions.empty:
         print("WARNING: No Gulf flights found. Check gulf_flights.txt and Comet prediction data.")
+        run.warn("No Gulf flights found in latest_predictions — aborting before later steps.")
+        run.finish("failed")
         print("\nDone.\n")
         sys.exit(1)
 
@@ -119,133 +143,154 @@ if __name__ == '__main__':
         ('Lat' in latest_predictions.columns and 'Lon' in latest_predictions.columns)
         or ('lat' in latest_predictions.columns and 'long' in latest_predictions.columns)
     )
-    if not has_coords:
-        print("[3/10] Extracting flight coordinates (no Lat/Lon in predictions)...")
-        for fn in latest_predictions['flight_name'].unique():
-            fb = flight_basename(fn)
-            if not os.path.exists(f"app/data/metadata/{fb}.csv"):
-                extract_flight_coordinates(fb)
-            else:
-                print(f"Metadata already exists for {fn}")
-        generate_metadata()
-    else:
-        print("[3/10] Predictions already have coordinates — skipping metadata extraction.")
+    with run.step("extract_coordinates"):
+        if not has_coords:
+            print("[3/10] Extracting flight coordinates (no Lat/Lon in predictions)...")
+            for fn in latest_predictions['flight_name'].unique():
+                fb = flight_basename(fn)
+                if not os.path.exists(f"app/data/metadata/{fb}.csv"):
+                    extract_flight_coordinates(fb)
+                else:
+                    print(f"Metadata already exists for {fn}")
+            generate_metadata()
+        else:
+            print("[3/10] Predictions already have coordinates — skipping metadata extraction.")
 
     # --- 4. Normalize scores and add human_labeled ---
     print("[4/10] Normalizing scores and human_labeled...")
-    latest_predictions = normalize_predictions_scores(latest_predictions)
-    latest_predictions.to_csv(
-        "app/data/most_recent_all_flight_predictions.csv", index=False)
+    with run.step("normalize_scores"):
+        latest_predictions = normalize_predictions_scores(latest_predictions)
+        latest_predictions.to_csv(
+            "app/data/most_recent_all_flight_predictions.csv", index=False)
 
     # --- 5. Apply annotations and build indices ---
     print("[5/10] Applying annotations and building indices...")
-    annotations_df = load_annotations("app/data/annotations.csv")
-    effective_predictions = apply_annotations(
-        latest_predictions, annotations_df,
-        id_col="crop_image_id", label_col="cropmodel_label", set_col="set"
-    )
-    effective_predictions = ensure_human_labeled(effective_predictions,
-                                                 set_col="set")
-    fp_mask = effective_predictions["cropmodel_label"] == "FalsePositive"
-    fp_count = fp_mask.sum()
-    if fp_count:
-        print(f"Dropping {fp_count} FalsePositive rows from effective "
-              "predictions")
-    effective_predictions = effective_predictions[~fp_mask]
-    effective_path = Path(
-        "app/data/most_recent_all_flight_predictions_effective.csv")
-    effective_predictions.to_csv(effective_path, index=False)
-    indices = build_predictions_indices(effective_predictions)
-    indices_path = Path("app/data/predictions_indices.json")
-    with open(indices_path, "w") as f:
-        json.dump(indices, f, indent=2)
-    print(f"      Wrote {indices_path} and {effective_path}")
+    with run.step("apply_annotations_and_indices"):
+        annotations_df = load_annotations("app/data/annotations.csv")
+        run.counts["annotations_rows"] = len(annotations_df)
+        effective_predictions = apply_annotations(
+            latest_predictions, annotations_df,
+            id_col="crop_image_id", label_col="cropmodel_label", set_col="set"
+        )
+        effective_predictions = ensure_human_labeled(effective_predictions,
+                                                     set_col="set")
+        fp_mask = effective_predictions["cropmodel_label"] == "FalsePositive"
+        fp_count = int(fp_mask.sum())
+        run.counts["false_positive_rows_dropped"] = fp_count
+        if fp_count:
+            print(f"Dropping {fp_count} FalsePositive rows from effective "
+                  "predictions")
+        effective_predictions = effective_predictions[~fp_mask]
+        effective_path = Path(
+            "app/data/most_recent_all_flight_predictions_effective.csv")
+        effective_predictions.to_csv(effective_path, index=False)
+        indices = build_predictions_indices(effective_predictions)
+        run.counts["effective_predictions_rows"] = len(effective_predictions)
+        run.counts["species_count"] = len(indices.get("species_list", []))
+        run.counts["effective_flight_count"] = len(indices.get("flight_list", []))
+        indices_path = Path("app/data/predictions_indices.json")
+        with open(indices_path, "w") as f:
+            json.dump(indices, f, indent=2)
+        print(f"      Wrote {indices_path} and {effective_path}")
 
     # --- 6. Normalize predictions.csv (full history) ---
     print("[6/10] Normalizing full predictions history...")
-    predictions_path = Path("app/data/predictions.csv")
-    if predictions_path.exists():
-        predictions_df = pd.read_csv(predictions_path)
-        predictions_df = normalize_predictions_scores(predictions_df)
-        predictions_df.to_csv(predictions_path, index=False)
+    with run.step("normalize_predictions_history"):
+        predictions_path = Path("app/data/predictions.csv")
+        if predictions_path.exists():
+            predictions_df = pd.read_csv(predictions_path)
+            predictions_df = normalize_predictions_scores(predictions_df)
+            predictions_df.to_csv(predictions_path, index=False)
 
     # --- 7. Create shapefiles ---
     print("[7/10] Creating shapefiles...")
-    comet_utils.create_shapefiles(
-        latest_predictions,
-        metadata=None if has_coords else "app/data/metadata.csv",
-    )
+    with run.step("create_shapefiles"):
+        comet_utils.create_shapefiles(
+            latest_predictions,
+            metadata=None if has_coords else "app/data/metadata.csv",
+        )
 
     # --- 8. Smart crop download ---
     print("[8/10] Checking crop download...")
-    current_experiments = sorted(
-        latest_predictions['experiment'].unique().tolist())
-    manifest = load_manifest()
-    old_experiments = manifest.get("experiments", [])
+    with run.step("crop_download"):
+        current_experiments = sorted(
+            latest_predictions['experiment'].unique().tolist())
+        manifest = load_manifest()
+        old_experiments = manifest.get("experiments", [])
+        run.counts["current_experiments"] = current_experiments
+        run.counts["previous_experiments"] = old_experiments
 
-    fp_image_ids = set(
-        annotations_df.loc[
-            annotations_df["new_label"] == "FalsePositive", "image_id"
-        ].astype(str)
-    )
-    print(f"Will skip {len(fp_image_ids)} FalsePositive image(s) "
-          "during download")
+        fp_image_ids = set(
+            annotations_df.loc[
+                annotations_df["new_label"] == "FalsePositive", "image_id"
+            ].astype(str)
+        )
+        print(f"Will skip {len(fp_image_ids)} FalsePositive image(s) "
+              "during download")
 
-    if current_experiments == old_experiments:
-        print("Crop manifest unchanged — skipping download")
-        removed = 0
-        for fp_id in fp_image_ids:
-            fp_path = IMAGES_DIR / fp_id
-            if fp_path.exists():
-                fp_path.unlink()
-                removed += 1
-        if removed:
-            print(f"Removed {removed} existing FalsePositive image(s) "
-                  "from disk")
-    else:
-        print(f"Experiment set changed "
-              f"({len(old_experiments)} → {len(current_experiments)}). "
-              "Re-downloading crops...")
-        clear_crop_images()
+        if current_experiments == old_experiments:
+            print("Crop manifest unchanged — skipping download")
+            run.counts["crop_download_triggered"] = False
+            removed = 0
+            for fp_id in fp_image_ids:
+                fp_path = IMAGES_DIR / fp_id
+                if fp_path.exists():
+                    fp_path.unlink()
+                    removed += 1
+            if removed:
+                print(f"Removed {removed} existing FalsePositive image(s) "
+                      "from disk")
+            run.counts["fp_images_removed"] = removed
+        else:
+            print(f"Experiment set changed "
+                  f"({len(old_experiments)} → {len(current_experiments)}). "
+                  "Re-downloading crops...")
+            run.counts["crop_download_triggered"] = True
+            clear_crop_images()
 
-        for experiment_name in current_experiments:
-            comet_utils.download_images(save_dir="app/data/images",
-                                        experiment_name=experiment_name)
-            exp_dir = IMAGES_DIR / experiment_name
-            if exp_dir.exists():
-                for image in os.listdir(str(exp_dir)):
-                    if image in fp_image_ids:
-                        os.remove(str(exp_dir / image))
-                        continue
-                    shutil.move(str(exp_dir / image),
-                                str(IMAGES_DIR / image))
-                shutil.rmtree(str(exp_dir))
+            for experiment_name in current_experiments:
+                comet_utils.download_images(save_dir="app/data/images",
+                                            experiment_name=experiment_name)
+                exp_dir = IMAGES_DIR / experiment_name
+                if exp_dir.exists():
+                    for image in os.listdir(str(exp_dir)):
+                        if image in fp_image_ids:
+                            os.remove(str(exp_dir / image))
+                            continue
+                        shutil.move(str(exp_dir / image),
+                                    str(IMAGES_DIR / image))
+                    shutil.rmtree(str(exp_dir))
 
-        removed = 0
-        for fp_id in fp_image_ids:
-            fp_path = IMAGES_DIR / fp_id
-            if fp_path.exists():
-                fp_path.unlink()
-                removed += 1
-        if removed:
-            print(f"Removed {removed} existing FalsePositive image(s) "
-                  "from disk")
+            removed = 0
+            for fp_id in fp_image_ids:
+                fp_path = IMAGES_DIR / fp_id
+                if fp_path.exists():
+                    fp_path.unlink()
+                    removed += 1
+            if removed:
+                print(f"Removed {removed} existing FalsePositive image(s) "
+                      "from disk")
+            run.counts["fp_images_removed"] = removed
 
-        save_manifest(current_experiments)
-        print(f"      Downloaded crops for {len(current_experiments)} experiment(s)")
+            save_manifest(current_experiments)
+            run.counts["crop_experiments_downloaded"] = len(current_experiments)
+            print(f"      Downloaded crops for {len(current_experiments)} experiment(s)")
 
     # --- 9. Flythrough videos (one per flight from its latest experiment) ---
     print("[9/10] Downloading flythrough videos...")
-    flight_to_experiment = (
-        latest_predictions.dropna(subset=["flight_name", "experiment"])
-        .drop_duplicates("flight_name")
-        .set_index("flight_name")["experiment"]
-        .to_dict()
-    )
-    comet_utils.download_flythrough_videos(flight_to_experiment, save_dir="app/data/videos")
+    with run.step("flythrough_videos"):
+        flight_to_experiment = (
+            latest_predictions.dropna(subset=["flight_name", "experiment"])
+            .drop_duplicates("flight_name")
+            .set_index("flight_name")["experiment"]
+            .to_dict()
+        )
+        run.counts["flights_with_experiment"] = len(flight_to_experiment)
+        comet_utils.download_flythrough_videos(flight_to_experiment, save_dir="app/data/videos")
 
     # --- 10. Flight reports (transect map, report PDF, shapefiles, etc.) ---
     print("[10/10] Downloading flight reports...")
-    comet_utils.download_flight_reports(flight_to_experiment, save_dir="app/data/reports")
+    with run.step("flight_reports"):
+        comet_utils.download_flight_reports(flight_to_experiment, save_dir="app/data/reports")
 
     print("\nDone.\n")
