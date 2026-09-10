@@ -1,8 +1,8 @@
 import streamlit as st
 from pathlib import Path
 from utils.styling import load_css
-from utils.auth import require_login
 from utils.indices import load_predictions_indices
+from utils.nav import render_sidebar_nav
 
 
 # Resolve relative to this file so it works regardless of Streamlit cwd
@@ -21,7 +21,7 @@ def _flight_list(_indices_mtime: float = 0):
 
 
 def app():
-    require_login()
+    render_sidebar_nav()
     st.title("Detection flythrough videos")
     st.markdown("Select a flight to play its detection flythrough video (detections overlaid on imagery).")
 

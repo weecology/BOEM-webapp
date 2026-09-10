@@ -11,6 +11,7 @@ from utils.auth import require_login
 from utils.annotations import load_annotations, reduce_annotations, apply_annotations, ensure_human_labeled
 from utils.indices import load_predictions_indices, EFFECTIVE_PREDICTIONS_PATH
 from utils.taxonomy import species_display, to_scientific
+from utils.nav import render_sidebar_nav
 
 @st.cache_data
 def get_all_species(taxonomy_data):
@@ -160,6 +161,7 @@ def _save_annotations(image_ids, new_label, mark_review=True):
 
 
 def app():
+    render_sidebar_nav()
     require_login()
     st.title("Bulk Image Labeling")
     st.markdown("""

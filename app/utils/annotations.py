@@ -1,3 +1,5 @@
+from __future__ import annotations  # allows `str | Path`-style hints on Python 3.9
+
 from pathlib import Path
 from typing import Optional
 

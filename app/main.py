@@ -10,11 +10,15 @@ import pandas as pd
 import geopandas as gpd
 import os
 from PIL import Image
-from utils.auth import require_login
 from utils.annotations import load_annotations, apply_annotations, apply_annotations_to_gdf, ensure_human_labeled
 from utils.indices import load_predictions_indices, EFFECTIVE_PREDICTIONS_PATH
 from utils.styling import inject_landing_css
 from utils.taxonomy import species_display, to_scientific
+from utils.species_colors import (
+    build_species_rank, species_color, render_color_legend,
+    MAP_DISTINCT_LIMIT, OTHER_COLOR,
+)
+from utils.nav import render_sidebar_nav
 
 st.set_page_config(
     page_title="Bureau of Ocean Energy Management - Gulf of America Biodiversity Survey",
@@ -22,8 +26,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Require login for all content
-require_login()
+render_sidebar_nav()
 inject_landing_css()
 
 # Species name preference: common (default) vs scientific
@@ -61,6 +64,12 @@ def _load_indices():
     return load_predictions_indices()
 
 
+@st.cache_data
+def _load_gdf(path):
+    """Cached shapefile read — avoids re-parsing the shapefile on every widget interaction."""
+    return gpd.read_file(path)
+
+
 # Read the data (prefer effective CSV when available)
 _effective = _load_effective_predictions()
 if _effective is not None:
@@ -73,7 +82,7 @@ df = df[df["cropmodel_label"] != "FalsePositive"]
 df = df[df["cropmodel_label"].str.count(" ") == 1]
 
 annotations_df = load_annotations("app/data/annotations.csv")
-gdf = gpd.read_file(data_path.parent / "all_predictions.shp")
+gdf = _load_gdf(data_path.parent / "all_predictions.shp")
 gdf = apply_annotations_to_gdf(gdf, annotations_df, gdf_image_col="crop_image", gdf_label_col="cropmodel_", gdf_set_col="set")
 gdf['date'] = pd.to_datetime(gdf['timestamp'], errors='coerce')
 
@@ -193,7 +202,7 @@ m = leafmap.Map(center=[28, -90], zoom=6)
 app_data_dir = Path(__file__).parent / "data"
 default_file = app_data_dir / "all_predictions.shp"
 if default_file.exists():
-    gdf_obs = gpd.read_file(default_file)
+    gdf_obs = _load_gdf(default_file)
     # Normalize shapefile column names (ESRI Shapefile truncates to 10 chars; prepare uses Lat/Lon, timestamp)
     _cols = gdf_obs.columns
     if "Lat" in _cols and "lat" not in _cols:
@@ -219,6 +228,7 @@ if default_file.exists():
     gdf_obs = gdf_obs[gdf_obs['cropmodel_'] != "FalsePositive"]
     gdf_obs = ensure_human_labeled(gdf_obs, set_col="set")
     indices = _load_indices()
+    species_rank = build_species_rank(indices) if indices else []
     if indices:
         unique_labels = indices["species_list"]
     else:
@@ -243,6 +253,8 @@ if default_file.exists():
         value=True,
         help="If checked, only images that have been reviewed by a human will be shown."
     )
+    st.caption("Map colors — the 3 most-observed species get a fixed color; every other species shares the gray 'Other' marker:")
+    render_color_legend(species_rank, MAP_DISTINCT_LIMIT, use_common)
     m.add_basemap("OpenStreetMap")
     m.add_wms_layer(
         url="https://wms.gebco.net/mapserv?",
@@ -252,8 +264,6 @@ if default_file.exists():
         transparent=True,
         attribution="GEBCO"
     )
-    # Custom pane so observation markers draw on top of other overlays (e.g. BOEM layers)
-    folium.map.CustomPane("observations_top", z_index=450, pointer_events=True).add_to(m    )
     # Custom pane so observation markers draw on top of other overlays (e.g. BOEM layers)
     folium.map.CustomPane("observations_top", z_index=450, pointer_events=True).add_to(m)
     _boem_lease_blocks_url = (
@@ -317,6 +327,12 @@ if default_file.exists():
             # Remove image_link/crop_api_path logic; rename to public-facing "Species"
             filtered_gdf = filtered_gdf[['score', 'cropmodel_', 'cropmode_1', 'set',
                             'flight_n_1', 'date', 'lat', 'long', 'crop_image', 'geometry']].copy()
+            # Fixed per-species marker color (keyed on the scientific name, before
+            # it's overwritten by the display name below) — shared with the
+            # Species Analysis page's bar chart via the same ranked species list.
+            filtered_gdf['_species_color'] = filtered_gdf['cropmodel_'].map(
+                lambda s: species_color(s, species_rank, MAP_DISTINCT_LIMIT)
+            )
             filtered_gdf = filtered_gdf.rename(columns={
                 'score': 'Detection Score',
                 'cropmodel_': 'Species',
@@ -334,7 +350,12 @@ if default_file.exists():
             m.add_gdf(
                 filtered_gdf,
                 layer_name=f"Observations (score ≥ {score_threshold})",
-                style={'color': "#0000FF"},
+                style_function=lambda feature: {
+                    "color": feature["properties"].get("_species_color", OTHER_COLOR),
+                    "fillColor": feature["properties"].get("_species_color", OTHER_COLOR),
+                    "fillOpacity": 0.85,
+                    "weight": 1,
+                },
                 info_mode='on_click',
                 hover_style={'sticky': True},
                 info_columns=['Image'],
@@ -365,7 +386,7 @@ if default_file.exists():
 
         try:
             temp_file = app_data_dir / "temp_filtered.shp"
-            gallery_gdf.to_file(temp_file)
+            gallery_gdf.drop(columns=["_species_color"], errors="ignore").to_file(temp_file)
             with open(temp_file, 'rb') as file:
                 shapefile_bytes = file.read()
                 st.download_button(

@@ -3,10 +3,10 @@ from pathlib import Path
 from PIL import Image
 from utils.styling import load_css
 import pandas as pd
-from utils.auth import require_login
 from utils.annotations import load_annotations, apply_annotations, ensure_human_labeled
 from utils.indices import load_predictions_indices, EFFECTIVE_PREDICTIONS_PATH
 from utils.taxonomy import species_display, to_scientific
+from utils.nav import render_sidebar_nav
 
 
 @st.cache_data
@@ -42,7 +42,7 @@ def _open_image_rgb(image_path: str):
 
 
 def app():
-    require_login()
+    render_sidebar_nav()
     st.title("Predictions Viewer")
 
     # Load predictions (effective if available, else base + annotations)

@@ -4,8 +4,8 @@ from pathlib import Path
 import zipfile
 import io
 from utils.styling import load_css
-from utils.auth import require_login
 from utils.indices import load_predictions_indices
+from utils.nav import render_sidebar_nav
 
 
 REPORTS_DIR = Path(__file__).resolve().parents[1] / "data" / "reports"
@@ -33,7 +33,7 @@ def _zip_report_folder(folder: Path) -> bytes:
 
 
 def app():
-    require_login()
+    render_sidebar_nav()
     st.title("Flight reports")
     st.markdown("Select a flight to view its transect map and download the full report assets (HTML map, PDF, shapefiles, CSV).")
 
