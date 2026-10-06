@@ -117,3 +117,11 @@ app/data/videos/
 app/data/reports/
 app/data/logs/
 
+
+# local virtualenv created in repo root
+/bin/
+/etc/
+/share/
+/lib/
+/include/
+pyvenv.cfg
