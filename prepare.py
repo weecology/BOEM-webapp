@@ -1,5 +1,5 @@
 from app.utils import comet_utils
-from app.utils.annotations import load_annotations, apply_annotations, ensure_human_labeled
+from app.utils.annotations import load_annotations, apply_annotations, ensure_human_labeled, HUMAN_LABELED_SETS
 from app.utils.run_log import RunLog
 from extract_coordinates import extract_flight_coordinates, generate_metadata
 import pandas as pd
@@ -18,14 +18,14 @@ def normalize_predictions_scores(df: pd.DataFrame) -> pd.DataFrame:
     """
     Normalize scores to 0-1 scale and add human_labeled column.
 
-    - Adds human_labeled: True when set in train/validation/review, else False
+    - Adds human_labeled: True when set in HUMAN_LABELED_SETS (train/validation/review/reviewed), else False
     - For human_labeled rows (or score > 1): sets score = 1.0
     """
     df = df.copy()
     if 'set' not in df.columns:
         df['human_labeled'] = False
         return df
-    df['human_labeled'] = df['set'].isin(['train', 'validation', 'review'])
+    df['human_labeled'] = df['set'].isin(HUMAN_LABELED_SETS)
     # Normalize scores: human-labeled and any score > 1 become 1.0
     mask = df['human_labeled'] | (df['score'] > 1)
     if 'score' in df.columns:

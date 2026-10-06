@@ -6,6 +6,11 @@ from typing import Optional
 import pandas as pd
 
 
+# Set values that mean a human looked at the box. The BOEM pipeline writes
+# Label Studio review annotations as set="reviewed"; this app's own Bulk
+# Labeling overrides write set="review". Both count as human-labeled.
+HUMAN_LABELED_SETS = ("train", "validation", "review", "reviewed")
+
 ANNOTATION_COLUMNS = [
     "image_id",
     "original_label",
@@ -99,7 +104,7 @@ def apply_annotations(
 
 def ensure_human_labeled(df: pd.DataFrame, set_col: str = "set") -> pd.DataFrame:
     """Compute human_labeled from set column (call after apply_annotations).
-    human_labeled is True when set is train, validation, or review.
+    human_labeled is True when set is in HUMAN_LABELED_SETS.
     """
     if df is None or len(df) == 0:
         return df
@@ -108,7 +113,7 @@ def ensure_human_labeled(df: pd.DataFrame, set_col: str = "set") -> pd.DataFrame
         df["human_labeled"] = False
         return df
     df = df.copy()
-    df["human_labeled"] = df[set_col].isin(["train", "validation", "review"])
+    df["human_labeled"] = df[set_col].isin(HUMAN_LABELED_SETS)
     return df
 
 
