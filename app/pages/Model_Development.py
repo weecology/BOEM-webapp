@@ -7,6 +7,21 @@ from utils.auth import require_login
 from utils.nav import render_sidebar_nav
 
 
+
+def _with_point_size(df):
+    """Return (df, use_size) with a NaN-safe '_point_size' column for px.scatter.
+
+    val_support is NaN for classification runs that never logged
+    val_annotations.csv; Plotly rejects NaN marker sizes and the whole chart
+    fails. Missing values get the smallest known support so those runs still
+    plot (as small points); hover still shows the true val_support.
+    """
+    if "val_support" not in df.columns or df["val_support"].notna().sum() == 0:
+        return df, False
+    df = df.copy()
+    df["_point_size"] = df["val_support"].fillna(df["val_support"].min())
+    return df, True
+
 def app():
     render_sidebar_nav()
     require_login()  # internal tool — was missing this gate; every other internal/public page already requires login
@@ -110,17 +125,17 @@ def app():
         if not micro_accuracy_df.empty:
             micro_accuracy_df = micro_accuracy_df.copy()
             micro_accuracy_df["timestamp"] = pd.to_datetime(micro_accuracy_df["timestamp"])
-            use_size = "val_support" in micro_accuracy_df.columns
+            micro_accuracy_df, use_size = _with_point_size(micro_accuracy_df)
             fig_classification = px.scatter(
                 micro_accuracy_df,
                 x='timestamp',
                 y='metricValue',
-                size='val_support' if use_size else None,
+                size='_point_size' if use_size else None,
                 size_max=20,
                 title='Classification Model Metrics Over Time',
                 labels={'timestamp': 'Timestamp', 'metricValue': 'Accuracy'},
                 trendline='ols' if show_trend else None,
-                hover_data=['val_support'] if use_size else None,
+                hover_data={'val_support': True, '_point_size': False} if use_size else None,
             )
             if not use_size:
                 fig_classification.update_traces(marker=dict(size=10))
@@ -162,17 +177,17 @@ def app():
             if not metric_series.empty:
                 metric_series = metric_series.copy()
                 metric_series["timestamp"] = pd.to_datetime(metric_series["timestamp"])
-                use_size = "val_support" in metric_series.columns
+                metric_series, use_size = _with_point_size(metric_series)
                 fig_species = px.scatter(
                     metric_series,
                     x="timestamp",
                     y="metricValue",
-                    size="val_support" if use_size else None,
+                    size="_point_size" if use_size else None,
                     size_max=20,
                     title=f"{selected_display} over time",
                     labels={"timestamp": "Timestamp", "metricValue": "Accuracy"},
                     trendline='ols' if show_trend else None,
-                    hover_data=["val_support"] if use_size else None,
+                    hover_data={"val_support": True, "_point_size": False} if use_size else None,
                 )
                 if not use_size:
                     fig_species.update_traces(marker=dict(size=10))
