@@ -1,5 +1,6 @@
-[ui]
-hide_sidebar_nav = true
+# Hide Streamlit's automatic page list; utils/nav.py renders a grouped nav instead
+[client]
+showSidebarNavigation = false
 
 # Scientific / agency theme: credible, readable, restrained
 [theme]
